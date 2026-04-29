@@ -1,0 +1,27 @@
+ --  S1 -- 
+43 - Bhargavi
+47 – Bhuvana
+63 – Ajay, Sai Teja
+55 - Siri
+
+ --  S2 -- 
+12 - Nagaraju, Venky
+23 – Sunil
+31 – N. Jhansi, Rajeswari
+39 – P. Jhansi, swapna
+
+
+ --  S3 -- 
+5 - Satyakala
+6 - bhavya, Manvi
+8 - Akash, Karunakar
+23 – Sangam Ganesh, Thiru
+31 – Raj Kiran, Robert
+39 – Vikas, Harish
+
+ --  S4 -- 
+8  - Rohit
+23 – Gamya, Sai Lakshmi
+31 – Teja, Ganesh Bora
+32 - Karthik
+40 - Mamatha, Roshini
