@@ -9,9 +9,21 @@ const amcDetailsSchema = new mongoose.Schema({
   locationsCount: { type: Number, default: 0 },
   contactPerson: String,
   contactPhone: String,
-  gst: String,
+  authorizedPerson1: String,
+  authorizedPerson2: String,
+  address: String,
+  contact: String,
+  gstin: String,
+  gst: String, // Keep for compatibility
   revenue: Number,
   cost: Number,
+  locations: [String],
+  devices: [{
+    type: { type: String }, // e.g. Laptop, Desktop
+    brand: String,
+    sn: String,
+    status: String
+  }]
 });
 
 const cmcDetailsSchema = new mongoose.Schema({
