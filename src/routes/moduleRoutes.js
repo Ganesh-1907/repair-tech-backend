@@ -115,12 +115,32 @@ const jobToStaffTask = (job) => ({
   ticketId: job.ticketId,
   title: job.title || job.problem || job.issue || job.deviceType || 'Assigned task',
   customerName: job.customerName || '-',
+  phoneNumber: job.phoneNumber || job.phone || '',
+  email: job.email || '',
   device: job.device || job.deviceModel || job.deviceType || '-',
+  deviceType: job.deviceType || job.device || '',
+  deviceModel: job.deviceModel || '',
+  serialNumber: job.serialNumber || '',
   issue: job.issue || job.problem || job.problemNotes || '-',
+  problem: job.problem || job.issue || '',
+  problemNotes: job.problemNotes || '',
+  previousProblem: job.previousProblem || job.previousProblemNotes || job.oldProblem || '',
+  condition: job.condition || [],
+  accessories: job.accessories || [],
   priority: job.priority || 'Medium',
   status: job.status || job.jobStatus || job.deliveryStatus || 'Assigned',
   assignedTo: job.assignedTo || job.technician || job.staffName || '-',
   expectedDelivery: job.expectedDelivery,
+  quote: job.quote,
+  quoteStatus: job.quoteStatus || job.quote?.status,
+  paymentStatus: job.paymentStatus || '',
+  paidAmount: toNumber(job.paidAmount),
+  labourCharge: toNumber(job.labourCharge),
+  discount: toNumber(job.discount),
+  tax: toNumber(job.tax),
+  partsUsed: job.partsUsed || [],
+  activity: job.activity || [],
+  closeReport: job.closeReport || null,
   updatedAt: job.updatedAt,
   source: 'Job',
 });
@@ -132,6 +152,11 @@ const leadToStaffTask = (lead) => ({
   customerName: lead.customerName || lead.name || '-',
   device: lead.company || lead.source || 'Lead',
   issue: getNextLeadStep(lead),
+  phoneNumber: lead.mobileNumber || lead.phone || lead.phoneNumber,
+  email: lead.email || '',
+  problem: lead.problem || lead.requirement || '',
+  problemNotes: lead.notes || '',
+  previousProblem: lead.previousProblem || '',
   priority: lead.priority || 'Medium',
   status: lead.category || lead.status || 'Assigned',
   assignedTo: lead.assignedTechnician || lead.staffName || lead.assignedTo || '-',
@@ -139,7 +164,6 @@ const leadToStaffTask = (lead) => ({
   updatedAt: lead.updatedAt || lead.createdAt,
   source: 'Lead',
   leadId: lead.id,
-  phoneNumber: lead.mobileNumber || lead.phone || lead.phoneNumber,
 });
 
 const getJobAmount = (job) => toNumber(job.total || job.amount || job.paidAmount || job.estimate || job.quote?.estimate || 0);
@@ -147,6 +171,149 @@ const getJobAmount = (job) => toNumber(job.total || job.amount || job.paidAmount
 const getInvoiceAmount = (invoice) => toNumber(invoice.total || invoice.amount || invoice.subtotal || invoice.revenue || 0);
 
 const getInvoiceDate = (invoice) => parseDate(invoice.date || invoice.issueDate || invoice.createdAt || invoice.billingMonth || invoice.paidOn);
+
+const getTaskStatusText = (task) => String(task?.status || task?.jobStatus || task?.deliveryStatus || '').toLowerCase();
+
+const isCompletedTask = (task) => ['completed', 'closed', 'delivered', 'paid', 'done'].some((item) => getTaskStatusText(task).includes(item));
+
+const isInProgressTask = (task) => ['progress', 'started', 'repair', 'quality'].some((item) => getTaskStatusText(task).includes(item)) && !isCompletedTask(task);
+
+const isSameCalendarDay = (value, date = new Date()) => {
+  const parsed = parseDate(value);
+  if (!parsed) return false;
+  return isoDate(parsed) === isoDate(date);
+};
+
+const getStaffIdentity = (user = {}, staffProfile = {}) => ({
+  ids: [user.staffId, staffProfile.id].map(normalizeAssignmentValue).filter(Boolean),
+  names: [user.name, user.email, staffProfile.name, staffProfile.email].map(normalizeAssignmentValue).filter(Boolean),
+});
+
+const getStaffProfileForUser = (user = {}, staffRows = []) => {
+  if (user.role !== 'staff') {
+    return {
+      id: user.staffId || user.id || 'admin',
+      name: user.name || 'Admin',
+      email: user.email || '',
+      role: user.role || 'admin',
+      status: 'Active',
+      attendanceStatus: 'Present',
+    };
+  }
+
+  const identity = getStaffIdentity(user);
+  const profile = staffRows.find((row) => {
+    const rowIds = [row.id].map(normalizeAssignmentValue).filter(Boolean);
+    const rowNames = [row.name, row.email].map(normalizeAssignmentValue).filter(Boolean);
+    return rowIds.some((id) => identity.ids.includes(id)) || rowNames.some((name) => identity.names.includes(name));
+  });
+
+  return profile || {
+    id: user.staffId || '',
+    name: user.name || 'Staff',
+    email: user.email || '',
+    role: 'Staff',
+    status: 'Active',
+    attendanceStatus: 'Present',
+  };
+};
+
+const recordBelongsToStaff = (user = {}, row = {}, staffProfile = {}) => {
+  if (user.role !== 'staff') return true;
+  const identity = getStaffIdentity(user, staffProfile);
+  const rowIds = [row.staffId, row.createdByStaffId].map(normalizeAssignmentValue).filter(Boolean);
+  const rowNames = [row.staffName, row.createdBy, row.createdByName, row.staffEmail].map(normalizeAssignmentValue).filter(Boolean);
+  return rowIds.some((id) => identity.ids.includes(id)) || rowNames.some((name) => identity.names.includes(name));
+};
+
+const jobBelongsToUser = (user = {}, job = {}) => isAssignedToUser(user, {
+  ids: [job.staffId],
+  names: [job.assignedTo, job.technician, job.staffName],
+});
+
+const leadBelongsToUser = (user = {}, lead = {}) => isAssignedToUser(user, {
+  ids: [lead.assignedTechnicianId, lead.staffId],
+  names: [lead.assignedTechnician, lead.staffName, lead.assignedTo],
+});
+
+const getStaffPortalSummary = async (user = {}) => {
+  const [staffRows, jobs, leads, payments, expenses, attendanceLogs] = await Promise.all([
+    listRecords('staff'),
+    Job.find({}).sort({ updatedAt: -1 }).lean(),
+    listRecords('leads'),
+    listRecords('staffPayments'),
+    listRecords('staffExpenses'),
+    listRecords('staffAttendance'),
+  ]);
+
+  const staffProfile = getStaffProfileForUser(user, staffRows);
+  const filteredJobs = jobs.filter((job) => jobBelongsToUser(user, job));
+  const filteredLeads = leads.filter((lead) => leadBelongsToUser(user, lead));
+  const tasks = [
+    ...filteredJobs.map(jobToStaffTask),
+    ...filteredLeads.map(leadToStaffTask),
+  ].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+
+  const staffPayments = payments
+    .filter((row) => recordBelongsToStaff(user, row, staffProfile))
+    .sort((a, b) => new Date(b.paidOn || b.createdAt || 0) - new Date(a.paidOn || a.createdAt || 0));
+  const staffExpenses = expenses
+    .filter((row) => recordBelongsToStaff(user, row, staffProfile))
+    .sort((a, b) => new Date(b.spentOn || b.createdAt || 0) - new Date(a.spentOn || a.createdAt || 0));
+  const staffAttendance = attendanceLogs
+    .filter((row) => recordBelongsToStaff(user, row, staffProfile))
+    .sort((a, b) => new Date(b.loggedAt || b.createdAt || 0) - new Date(a.loggedAt || a.createdAt || 0));
+
+  const today = new Date();
+  const todayPayments = staffPayments.filter((row) => isSameCalendarDay(row.paidOn || row.createdAt, today));
+  const todayExpenses = staffExpenses.filter((row) => isSameCalendarDay(row.spentOn || row.createdAt, today));
+  const todayAttendance = staffAttendance.filter((row) => isSameCalendarDay(row.loggedAt || row.createdAt, today));
+  const completed = tasks.filter(isCompletedTask).length;
+  const inProgress = tasks.filter(isInProgressTask).length;
+  const totalPayments = sum(staffPayments, (row) => row.amount);
+  const totalExpenses = sum(staffExpenses, (row) => row.amount);
+  const todayPaymentTotal = sum(todayPayments, (row) => row.amount);
+  const todayExpenseTotal = sum(todayExpenses, (row) => row.amount);
+
+  return {
+    profile: staffProfile,
+    today: today.toISOString(),
+    stats: {
+      assignedTasks: tasks.length,
+      completedTasks: completed,
+      pendingTasks: Math.max(tasks.length - completed, 0),
+      inProgressTasks: inProgress,
+      todayAssigned: tasks.filter((task) => isSameCalendarDay(task.expectedDelivery || task.updatedAt, today)).length,
+      todayPayments: todayPaymentTotal,
+      todayExpenses: todayExpenseTotal,
+      netRevenue: totalPayments - totalExpenses,
+      totalPayments,
+      totalExpenses,
+    },
+    tasks,
+    payments: staffPayments,
+    expenses: staffExpenses,
+    attendanceLogs: staffAttendance,
+    todayAttendance,
+  };
+};
+
+const getAssignedTaskById = async (user, taskId) => {
+  const job = await Job.findOne({ id: taskId }).exec();
+  if (job) {
+    if (!jobBelongsToUser(user, job)) return { forbidden: true };
+    return { source: 'Job', raw: job, task: jobToStaffTask(job) };
+  }
+
+  const leads = await listRecords('leads');
+  const lead = leads.find((row) => String(row.id) === String(taskId) || `TASK-${row.id}` === taskId);
+  if (lead) {
+    if (!leadBelongsToUser(user, lead)) return { forbidden: true };
+    return { source: 'Lead', raw: lead, task: leadToStaffTask(lead) };
+  }
+
+  return null;
+};
 
 const buildRevenueRows = ({ billingInvoices, rentalInvoices, amcInvoices, cmcInvoices }) => [
   ...billingInvoices.map((row) => ({ ...row, source: 'Billing' })),
@@ -644,21 +811,157 @@ moduleRouter.get('/expenses/stats', async (req, res, next) => {
   }
 });
 
-moduleRouter.get('/staff/stats', async (req, res, next) => {
+moduleRouter.get('/staff/stats', requireAuth, async (req, res, next) => {
   try {
-    const [staff, pendingJobs, campaignJobs, leads] = await Promise.all([
+    const user = req.user || {};
+    const [allStaff, allPendingJobs, allCampaignJobs, allLeads] = await Promise.all([
       listRecords('staff'),
       listRecords('pendingJobs'),
       listRecords('campaignJobs'),
       listRecords('leads'),
     ]);
+
+    const staff = allStaff.filter((person) => {
+      if (user.role !== 'staff') return true;
+      const profile = getStaffProfileForUser(user, allStaff);
+      return normalizeAssignmentValue(person.id) === normalizeAssignmentValue(profile.id)
+        || normalizeAssignmentValue(person.email) === normalizeAssignmentValue(profile.email)
+        || normalizeAssignmentValue(person.name) === normalizeAssignmentValue(profile.name);
+    });
+    const pendingJobs = allPendingJobs.filter((job) => jobBelongsToUser(user, job));
+    const campaignJobs = allCampaignJobs.filter((job) => jobBelongsToUser(user, job));
+    const leads = allLeads.filter((lead) => leadBelongsToUser(user, lead));
+
     res.json(buildStaffDashboard({ staff, pendingJobs, campaignJobs, leads }));
   } catch (error) {
     next(error);
   }
 });
 
-moduleRouter.post('/staff/assign-job', async (req, res, next) => {
+moduleRouter.get('/staff/portal/summary', requireAuth, async (req, res, next) => {
+  try {
+    res.json(await getStaffPortalSummary(req.user || {}));
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/staff/attendance', requireAuth, async (req, res, next) => {
+  try {
+    const user = req.user || {};
+    const staffRows = await listRecords('staff');
+    const staffProfile = getStaffProfileForUser(user, staffRows);
+    const action = req.body.action || 'Check In';
+    const attendanceStatus = action === 'Mark Leave' ? 'On Leave' : 'Present';
+    const now = new Date();
+
+    const attendance = await saveRecord('staffAttendance', {
+      staffId: staffProfile.id,
+      staffName: staffProfile.name,
+      staffEmail: staffProfile.email,
+      action,
+      status: attendanceStatus,
+      location: req.body.location || '',
+      notes: req.body.notes || '',
+      loggedAt: now.toISOString(),
+    }, 'ATT');
+
+    if (staffProfile.id) {
+      await patchRecord('staff', staffProfile.id, {
+        attendanceStatus,
+        status: action === 'Mark Leave' ? 'On Leave' : staffProfile.status || 'Active',
+        lastSeen: now.toISOString(),
+      }).catch(() => null);
+    }
+
+    res.status(201).json(attendance);
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/staff/payments', requireAuth, async (req, res, next) => {
+  try {
+    const user = req.user || {};
+    const staffRows = await listRecords('staff');
+    const staffProfile = getStaffProfileForUser(user, staffRows);
+    const amount = toNumber(req.body.amount);
+    if (amount <= 0) return res.status(400).json({ message: 'Payment amount must be greater than zero.' });
+
+    const taskLookup = req.body.taskId ? await getAssignedTaskById(user, req.body.taskId) : null;
+    if (taskLookup?.forbidden) return res.status(403).json({ message: 'Not authorized to add payment for this task.' });
+
+    const payment = await saveRecord('staffPayments', {
+      staffId: staffProfile.id,
+      staffName: staffProfile.name,
+      staffEmail: staffProfile.email,
+      taskId: req.body.taskId || '',
+      taskTitle: taskLookup?.task?.title || req.body.taskTitle || '',
+      customerName: taskLookup?.task?.customerName || req.body.customerName || '',
+      amount,
+      mode: req.body.mode || 'Cash',
+      referenceNumber: req.body.referenceNumber || '',
+      notes: req.body.notes || '',
+      paidOn: req.body.paidOn || new Date().toISOString(),
+    }, 'SPAY');
+
+    if (taskLookup?.source === 'Job') {
+      const job = taskLookup.raw;
+      const paidAmount = toNumber(job.paidAmount) + amount;
+      const billAmount = getJobAmount(job);
+      job.paidAmount = paidAmount;
+      job.paymentStatus = billAmount && paidAmount >= billAmount ? 'Paid' : 'Partial';
+      job.activity.unshift({
+        id: `ACT-${Date.now()}`,
+        action: `Payment received: ${amount} via ${payment.mode}`,
+        at: new Date(),
+        user: user.name || user.email,
+        channel: 'Staff Portal',
+        status: job.paymentStatus,
+      });
+      await job.save();
+    }
+
+    res.status(201).json(payment);
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/staff/expenses', requireAuth, async (req, res, next) => {
+  try {
+    const user = req.user || {};
+    const staffRows = await listRecords('staff');
+    const staffProfile = getStaffProfileForUser(user, staffRows);
+    const amount = toNumber(req.body.amount);
+    if (amount <= 0) return res.status(400).json({ message: 'Expense amount must be greater than zero.' });
+
+    const taskLookup = req.body.taskId ? await getAssignedTaskById(user, req.body.taskId) : null;
+    if (taskLookup?.forbidden) return res.status(403).json({ message: 'Not authorized to add expense for this task.' });
+
+    const expense = await saveRecord('staffExpenses', {
+      staffId: staffProfile.id,
+      staffName: staffProfile.name,
+      staffEmail: staffProfile.email,
+      taskId: req.body.taskId || '',
+      taskTitle: taskLookup?.task?.title || req.body.taskTitle || '',
+      customerName: taskLookup?.task?.customerName || req.body.customerName || '',
+      category: req.body.category || 'Fuel',
+      amount,
+      mode: req.body.mode || 'Cash',
+      receiptPhoto: req.body.receiptPhoto || '',
+      receiptPhotoName: req.body.receiptPhotoName || '',
+      notes: req.body.notes || '',
+      spentOn: req.body.spentOn || new Date().toISOString(),
+    }, 'SEXP');
+
+    res.status(201).json(expense);
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/staff/assign-job', requireAuth, async (req, res, next) => {
   try {
     const { staffId, pendingJobId, priority, notes } = req.body;
     const staff = await getRecord('staff', staffId);
@@ -714,6 +1017,53 @@ moduleRouter.get('/staff/tasks', requireAuth, async (req, res, next) => {
     res.json(tasks);
   } catch (error) {
     next(error);
+  }
+});
+
+moduleRouter.patch('/jobs/:id/close', requireAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const user = req.user || {};
+    const job = await Job.findOne({ id }).exec();
+
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+    if (!jobBelongsToUser(user, job)) return res.status(403).json({ message: 'Not authorized to close this job.' });
+
+    const now = new Date();
+    const closeReport = {
+      beforeJobPhoto: req.body.beforeJobPhoto || '',
+      beforeJobPhotoName: req.body.beforeJobPhotoName || '',
+      afterJobPhoto: req.body.afterJobPhoto || '',
+      afterJobPhotoName: req.body.afterJobPhotoName || '',
+      customerSignature: req.body.customerSignature || '',
+      customerSignatureName: req.body.customerSignatureName || '',
+      customerSignatureImage: req.body.customerSignatureImage || '',
+      customerSignatureImageName: req.body.customerSignatureImageName || '',
+      customerName: req.body.customerName || job.customerName || '',
+      workSummary: req.body.workSummary || '',
+      closedAt: now,
+      closedBy: user.name || user.email || '',
+      closedByStaffId: user.staffId || '',
+    };
+
+    job.status = 'Delivered & Closed';
+    job.jobStatus = 'Delivered & Closed';
+    job.deliveryStatus = 'Closed';
+    job.closeReport = closeReport;
+    job.activity = job.activity || [];
+    job.activity.unshift({
+      id: `ACT-${Date.now()}`,
+      action: 'Job closed from staff portal',
+      at: now,
+      user: user.name || user.email,
+      channel: 'Staff Portal',
+      status: 'Delivered & Closed',
+    });
+
+    await job.save();
+    return res.json(jobToStaffTask(job));
+  } catch (error) {
+    return next(error);
   }
 });
 
@@ -775,6 +1125,7 @@ moduleRouter.patch('/jobs/:id/status', requireAuth, async (req, res, next) => {
 
     task.jobStatus = status;
     task.status = status;
+    task.activity = task.activity || [];
     task.activity.unshift({
       id: `ACT-${Date.now()}`,
       action: `Status changed to ${status}`,

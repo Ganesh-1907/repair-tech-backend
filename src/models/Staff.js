@@ -12,6 +12,7 @@ const staffSchema = new mongoose.Schema(
     status: { type: String, default: 'Active' },
     attendanceStatus: String,
     assignedJobs: { type: Number, default: 0 },
+    lastSeen: Date,
     notes: String,
   },
   { timestamps: true }

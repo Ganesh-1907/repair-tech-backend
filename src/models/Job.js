@@ -26,6 +26,22 @@ const quoteHistorySchema = new mongoose.Schema({
   channel: String,
 });
 
+const jobCloseReportSchema = new mongoose.Schema({
+  beforeJobPhoto: String,
+  beforeJobPhotoName: String,
+  afterJobPhoto: String,
+  afterJobPhotoName: String,
+  customerSignature: String,
+  customerSignatureName: String,
+  customerSignatureImage: String,
+  customerSignatureImageName: String,
+  customerName: String,
+  workSummary: String,
+  closedAt: Date,
+  closedBy: String,
+  closedByStaffId: String,
+});
+
 const jobSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, unique: true },
@@ -77,6 +93,7 @@ const jobSchema = new mongoose.Schema(
       notes: String,
       status: String,
     },
+    closeReport: jobCloseReportSchema,
     activity: [activitySchema],
   },
   { timestamps: true }
