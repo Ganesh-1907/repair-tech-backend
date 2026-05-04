@@ -1,6 +1,8 @@
 import cors from 'cors';
 import express from 'express';
 import morgan from 'morgan';
+import { amcRouter } from './modules/amc/amc.routes.js';
+import { cmcRouter } from './modules/cmc/cmc.routes.js';
 import { authRouter } from './routes/authRoutes.js';
 import { crudRouter } from './routes/crudRoutes.js';
 import { moduleRouter } from './routes/moduleRoutes.js';
@@ -16,6 +18,8 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/amc', amcRouter);
+app.use('/api/cmc', cmcRouter);
 app.use('/api', moduleRouter);
 app.use('/api/records', crudRouter);
 
