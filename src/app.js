@@ -5,12 +5,13 @@ import { amcRouter } from './modules/amc/amc.routes.js';
 import { cmcRouter } from './modules/cmc/cmc.routes.js';
 import { authRouter } from './routes/authRoutes.js';
 import { crudRouter } from './routes/crudRoutes.js';
+import { leadsRouter } from './routes/leadsRoutes.js';
 import { moduleRouter } from './routes/moduleRoutes.js';
 
 export const app = express();
 
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN?.split(',') || true, credentials: true }));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '15mb' }));
 app.use(morgan('dev'));
 
 app.get('/api/health', (req, res) => {
@@ -18,6 +19,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/leads', leadsRouter);
 app.use('/api/amc', amcRouter);
 app.use('/api/cmc', cmcRouter);
 app.use('/api', moduleRouter);

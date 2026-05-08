@@ -11,6 +11,7 @@ const prefixes = {
   assets: 'AST',
   expenses: 'EXP',
   leads: 'LEAD',
+  leadRepairs: 'LRPR',
   billingInvoices: 'BILL',
   dashboardSnapshots: 'DASH',
   expenseDashboardSnapshots: 'EXPDASH',
@@ -35,12 +36,14 @@ const prefixes = {
   amcSchedules: 'AMCSCH',
   amcInvoices: 'AMCI',
   amcRenewals: 'AMCR',
+  amcRepairs: 'AMCRPR',
   cmcPlans: 'CMCPLN',
   cmcContracts: 'CMC',
   cmcDevices: 'CMCDEV',
   cmcSchedules: 'CMCSCH',
   cmcInvoices: 'CMCI',
   cmcPartsUsage: 'CMCPRT',
+  cmcRepairs: 'CMCRPR',
 };
 
 const allowedCollections = new Set([
@@ -48,6 +51,7 @@ const allowedCollections = new Set([
   'assets',
   'expenses',
   'leads',
+  'leadRepairs',
   'billingInvoices',
   'dashboardSnapshots',
   'expenseDashboardSnapshots',
@@ -73,12 +77,14 @@ const allowedCollections = new Set([
   'amcSchedules',
   'amcInvoices',
   'amcRenewals',
+  'amcRepairs',
   'cmcPlans',
   'cmcContracts',
   'cmcDevices',
   'cmcSchedules',
   'cmcInvoices',
   'cmcPartsUsage',
+  'cmcRepairs',
 ]);
 
 crudRouter.param('collection', (req, res, next, collection) => {
