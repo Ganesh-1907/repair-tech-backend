@@ -44,6 +44,7 @@ const prefixes = {
   cmcInvoices: 'CMCI',
   cmcPartsUsage: 'CMCPRT',
   cmcRepairs: 'CMCRPR',
+  staffExpenses: 'SEXP',
 };
 
 const allowedCollections = new Set([
@@ -85,6 +86,7 @@ const allowedCollections = new Set([
   'cmcInvoices',
   'cmcPartsUsage',
   'cmcRepairs',
+  'staffExpenses',
 ]);
 
 crudRouter.param('collection', (req, res, next, collection) => {
