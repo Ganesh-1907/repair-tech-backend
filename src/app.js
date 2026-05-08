@@ -5,6 +5,7 @@ import { amcRouter } from './modules/amc/amc.routes.js';
 import { cmcRouter } from './modules/cmc/cmc.routes.js';
 import { authRouter } from './routes/authRoutes.js';
 import { crudRouter } from './routes/crudRoutes.js';
+import { discountRouter } from './routes/discountRoutes.js';
 import { leadsRouter } from './routes/leadsRoutes.js';
 import { moduleRouter } from './routes/moduleRoutes.js';
 
@@ -22,6 +23,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/leads', leadsRouter);
 app.use('/api/amc', amcRouter);
 app.use('/api/cmc', cmcRouter);
+app.use('/api/discounts', discountRouter);
 app.use('/api', moduleRouter);
 app.use('/api/records', crudRouter);
 
