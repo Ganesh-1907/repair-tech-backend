@@ -120,6 +120,21 @@ crudRouter.get('/:collection/:id', async (req, res, next) => {
 
 crudRouter.post('/:collection', async (req, res, next) => {
   try {
+    if (req.params.collection === 'rentalQuotations' && req.body?.customerId) {
+      const existingRows = await listRecords('rentalQuotations');
+      const existing = existingRows.find((row) => row.customerId === req.body.customerId);
+      if (existing) {
+        const merged = {
+          ...existing,
+          ...req.body,
+          id: existing.id,
+          updatedAt: new Date().toISOString().slice(0, 10),
+        };
+        const updated = await saveRecord('rentalQuotations', merged, prefixes.rentalQuotations);
+        return res.status(200).json(updated);
+      }
+    }
+
     const payload = req.params.collection === 'staff' ? { ...req.body, role: 'Staff' } : req.body;
     const created = await saveRecord(req.params.collection, payload, prefixes[req.params.collection]);
     if (req.params.collection === 'staff') {
