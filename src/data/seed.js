@@ -18,7 +18,9 @@ import { modelMap } from '../utils/modelRegistry.js';
 import { ensureStaffUser } from '../utils/staffAuth.js';
 
 export const seedDatabase = async ({ reset = false, demo = false } = {}) => {
-  const adminEmail = 'ganesh.bora@gmail.com';
+  const adminEmail = 'gamya.pilli@gmail.com';
+  const adminName = 'Gamya Pilli';
+  const adminPassword = 'Gamya@123';
   const legacyAdminEmails = ['admin@enterprise.com'];
   const deprecatedRecordBuckets = ['dashboardSnapshots', 'dashboardAlerts'];
   const syncStaffUsers = async () => {
@@ -48,9 +50,9 @@ export const seedDatabase = async ({ reset = false, demo = false } = {}) => {
   const existingAdmin = await User.findOne({ email: adminEmail });
   if (!existingAdmin) {
     await User.create({
-      name: 'Ganesh Bora',
+      name: adminName,
       email: adminEmail,
-      passwordHash: await bcrypt.hash('Ganesh@1907', 10),
+      passwordHash: await bcrypt.hash(adminPassword, 10),
       role: 'admin',
     });
   }

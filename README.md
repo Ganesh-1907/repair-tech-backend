@@ -20,8 +20,8 @@ mongodb://localhost:27017/repairboy
 ## Default Login
 
 ```text
-email: ganesh.bora@gmail.com
-password: Ganesh@1907
+email: gamya.pilli@gmail.com
+password: Gamya@123
 ```
 
 Staff records created from Staff Listing also receive login access:

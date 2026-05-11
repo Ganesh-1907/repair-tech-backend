@@ -17,7 +17,7 @@ try {
   } else {
     console.log(`${reset ? 'Reset and seeded' : 'Seeded'} admin user only. Demo module records were skipped.`);
   }
-  console.log('Admin user ready: ganesh.bora@gmail.com / Ganesh@1907');
+  console.log('Admin user ready: gamya.pilli@gmail.com / Gamya@123');
   await mongoose.connection.close();
   process.exit(0);
 } catch (error) {
