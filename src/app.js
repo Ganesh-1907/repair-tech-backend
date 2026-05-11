@@ -11,7 +11,22 @@ import { moduleRouter } from './routes/moduleRoutes.js';
 
 export const app = express();
 
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN?.split(',') || true, credentials: true }));
+const configuredOrigins = (process.env.FRONTEND_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowDevLocalhost = (origin = '') => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow server-to-server calls or tools that omit origin.
+    if (!origin) return callback(null, true);
+    if (configuredOrigins.includes(origin) || allowDevLocalhost(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '15mb' }));
 app.use(morgan('dev'));
 
