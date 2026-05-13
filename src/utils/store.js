@@ -3,6 +3,22 @@ import { getModel } from './modelRegistry.js';
 
 export const makeId = (prefix) => `${prefix}-${Date.now().toString().slice(-6)}`;
 
+const contractTypeByCollection = {
+  amcContracts: 'AMC',
+  cmcContracts: 'CMC',
+  rentalContracts: 'Rental',
+};
+
+const getCollectionQuery = (collection) => {
+  const contractType = contractTypeByCollection[collection];
+  return contractType ? { contractType } : {};
+};
+
+const withCollectionFields = (collection, payload) => {
+  const contractType = contractTypeByCollection[collection];
+  return contractType ? { ...payload, contractType } : payload;
+};
+
 export const toClientRecord = (doc, isGeneric = true) => {
   if (isGeneric) {
     return {
@@ -27,7 +43,7 @@ export const listRecords = async (collection) => {
     console.log(`[Store] Listed ${rows.length} records for bucket: ${collection}`);
     return rows.map((row) => toClientRecord(row, true));
   }
-  const rows = await Model.find({}).sort({ createdAt: -1 }).lean();
+  const rows = await Model.find(getCollectionQuery(collection)).sort({ createdAt: -1 }).lean();
   console.log(`[Store] Listed ${rows.length} records for dedicated model: ${collection}`);
   return rows.map((row) => toClientRecord(row, false));
 };
@@ -38,7 +54,7 @@ export const getRecord = async (collection, id) => {
     const row = await Record.findOne({ bucket: collection, recordId: id });
     return row ? toClientRecord(row, true) : null;
   }
-  const row = await Model.findOne({ id });
+  const row = await Model.findOne({ id, ...getCollectionQuery(collection) });
   return row ? toClientRecord(row, false) : null;
 };
 
@@ -56,9 +72,10 @@ export const saveRecord = async (collection, payload, prefix = 'REC') => {
     return toClientRecord(row, true);
   }
 
+  const data = withCollectionFields(collection, { ...payload, id });
   const row = await Model.findOneAndUpdate(
-    { id },
-    { $set: { ...payload, id } },
+    { id, ...getCollectionQuery(collection) },
+    { $set: data },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
   return toClientRecord(row, false);
@@ -76,6 +93,6 @@ export const removeRecord = async (collection, id) => {
     const deleted = await Record.findOneAndDelete({ bucket: collection, recordId: id });
     return Boolean(deleted);
   }
-  const deleted = await Model.findOneAndDelete({ id });
+  const deleted = await Model.findOneAndDelete({ id, ...getCollectionQuery(collection) });
   return Boolean(deleted);
 };

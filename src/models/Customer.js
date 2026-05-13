@@ -10,6 +10,15 @@ const locationSchema = new mongoose.Schema({
   gstBranch: String,
 });
 
+const contactSchema = new mongoose.Schema(
+  {
+    name: String,
+    mobile: String,
+    email: String,
+  },
+  { _id: false }
+);
+
 const customerSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, unique: true },
@@ -20,9 +29,15 @@ const customerSchema = new mongoose.Schema(
     authorizedPerson2: String,
     gstNumber: String,
     address: String,
+    registeredAddress: String,
+    primaryAddress: String,
     contactNumber: String,
     email: String,
+    primaryContact: contactSchema,
+    secondaryContact: contactSchema,
     billingAddress: String,
+    notes: String,
+    devices: [mongoose.Schema.Types.Mixed],
     status: { type: String, default: 'Active' },
     locations: [locationSchema],
   },

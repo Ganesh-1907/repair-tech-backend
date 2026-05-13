@@ -13,17 +13,15 @@ const amcDetailsSchema = new mongoose.Schema({
   authorizedPerson2: String,
   address: String,
   contact: String,
+  email: String,
   gstin: String,
   gst: String, // Keep for compatibility
   revenue: Number,
   cost: Number,
   locations: [String],
-  devices: [{
-    type: { type: String }, // e.g. Laptop, Desktop
-    brand: String,
-    sn: String,
-    status: String
-  }]
+  primaryContact: mongoose.Schema.Types.Mixed,
+  secondaryContact: mongoose.Schema.Types.Mixed,
+  devices: [mongoose.Schema.Types.Mixed],
 });
 
 const cmcDetailsSchema = new mongoose.Schema({
@@ -33,7 +31,18 @@ const cmcDetailsSchema = new mongoose.Schema({
   cost: Number,
   profit: Number,
   contactPerson: String,
+  contactPhone: String,
   gst: String,
+  gstin: String,
+  authorizedPerson1: String,
+  authorizedPerson2: String,
+  address: String,
+  contact: String,
+  email: String,
+  locations: [String],
+  primaryContact: mongoose.Schema.Types.Mixed,
+  secondaryContact: mongoose.Schema.Types.Mixed,
+  devices: [mongoose.Schema.Types.Mixed],
 });
 
 const rentalDetailsSchema = new mongoose.Schema({
