@@ -38,6 +38,7 @@ const customerSchema = new mongoose.Schema(
     billingAddress: String,
     notes: String,
     devices: [mongoose.Schema.Types.Mixed],
+    quotation: mongoose.Schema.Types.Mixed,
     status: { type: String, default: 'Active' },
     locations: [locationSchema],
   },
