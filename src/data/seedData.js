@@ -308,10 +308,10 @@ export const seedRecords = {
     },
   ],
   staff: [
-    { id: 'STF-1001', name: 'Ravi Kumar', phone: '9876543210', email: 'ravi@repairtech.local', role: 'Staff', departmentSkill: 'Printer Repair', address: 'Indore', status: 'Active', attendanceStatus: 'Present', assignedJobs: 2 },
-    { id: 'STF-1002', name: 'Neha Sharma', phone: '9988776655', email: 'neha@repairtech.local', role: 'Staff', departmentSkill: 'Customer Support', address: 'Bhopal', status: 'Active', attendanceStatus: 'Present', assignedJobs: 1 },
-    { id: 'STF-1003', name: 'Meera Iyer', phone: '9776655443', email: 'meera@repairtech.local', role: 'Staff', departmentSkill: 'Laptop Repair', address: 'Indore', status: 'On Job', attendanceStatus: 'Present', assignedJobs: 4 },
-    { id: 'STF-1004', name: 'Amit Singh', phone: '9665544332', email: 'amit@repairtech.local', role: 'Staff', departmentSkill: 'Field Service', address: 'Ujjain', status: 'On Leave', attendanceStatus: 'On Leave', assignedJobs: 0 },
+    { id: 'STF-1001', name: 'Ravi Kumar', phone: '9876543210', email: 'ravi@repairboy.local', role: 'Staff', departmentSkill: 'Printer Repair', address: 'Indore', status: 'Active', attendanceStatus: 'Present', assignedJobs: 2 },
+    { id: 'STF-1002', name: 'Neha Sharma', phone: '9988776655', email: 'neha@repairboy.local', role: 'Staff', departmentSkill: 'Customer Support', address: 'Bhopal', status: 'Active', attendanceStatus: 'Present', assignedJobs: 1 },
+    { id: 'STF-1003', name: 'Meera Iyer', phone: '9776655443', email: 'meera@repairboy.local', role: 'Staff', departmentSkill: 'Laptop Repair', address: 'Indore', status: 'On Job', attendanceStatus: 'Present', assignedJobs: 4 },
+    { id: 'STF-1004', name: 'Amit Singh', phone: '9665544332', email: 'amit@repairboy.local', role: 'Staff', departmentSkill: 'Field Service', address: 'Ujjain', status: 'On Leave', attendanceStatus: 'On Leave', assignedJobs: 0 },
   ],
   pendingJobs: [
     { id: 'JOB-260401', customerName: 'Global Tech Solutions', device: 'HP LaserJet', issue: 'Paper jam', priority: 'High', status: 'Pending Assignment' },

@@ -16,7 +16,7 @@ const createTransporter = () => {
   });
 };
 
-const from = () => `"RepairTech Enterprise" <${process.env.ADMIN_EMAIL || process.env.EMAIL_USER}>`;
+const from = () => `"RepairBoy Enterprise" <${process.env.ADMIN_EMAIL || process.env.EMAIL_USER}>`;
 
 export const sendCredentialEmail = async ({ to, customerName, password, contractIds, loginUrl }) => {
   const transporter = createTransporter();
@@ -27,11 +27,11 @@ export const sendCredentialEmail = async ({ to, customerName, password, contract
   await transporter.sendMail({
     from: from(),
     to,
-    subject: 'Your Customer Portal Access — RepairTech Enterprise',
+    subject: 'Your Customer Portal Access — RepairBoy Enterprise',
     html: `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#0f172a;">
         <div style="background:#4f46e5;padding:24px 28px;border-radius:12px 12px 0 0;">
-          <h2 style="margin:0;color:#fff;font-size:1.3rem;">RepairTech Customer Portal</h2>
+          <h2 style="margin:0;color:#fff;font-size:1.3rem;">RepairBoy Customer Portal</h2>
         </div>
         <div style="padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
           <p style="margin:0 0 16px;">Dear <strong>${customerName}</strong>,</p>
@@ -54,7 +54,7 @@ export const sendCredentialEmail = async ({ to, customerName, password, contract
               <td style="padding:10px 14px;border:1px solid #e2e8f0;border-left:none;border-top:none;">${contractList}</td>
             </tr>
           </table>
-          <p style="margin:0;color:#94a3b8;font-size:0.82rem;">If you did not expect this email, please contact us immediately. This message was sent automatically by RepairTech Enterprise.</p>
+          <p style="margin:0;color:#94a3b8;font-size:0.82rem;">If you did not expect this email, please contact us immediately. This message was sent automatically by RepairBoy Enterprise.</p>
         </div>
       </div>
     `,
@@ -71,11 +71,11 @@ export const sendStaffCredentialEmail = async ({ to, name, password, loginUrl })
   await transporter.sendMail({
     from: from(),
     to,
-    subject: 'Your RepairTech Staff Account — Login Credentials',
+    subject: 'Your RepairBoy Staff Account — Login Credentials',
     html: `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#0f172a;">
         <div style="background:#0f172a;padding:24px 28px;border-radius:12px 12px 0 0;">
-          <h2 style="margin:0;color:#fff;font-size:1.3rem;">RepairTech Staff Portal</h2>
+          <h2 style="margin:0;color:#fff;font-size:1.3rem;">RepairBoy Staff Portal</h2>
         </div>
         <div style="padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
           <p style="margin:0 0 16px;">Hello <strong>${name}</strong>,</p>
@@ -114,11 +114,11 @@ export const sendPasswordResetEmail = async ({ to, name, resetUrl, isCustomer = 
   await transporter.sendMail({
     from: from(),
     to,
-    subject: `Reset Your Password — RepairTech ${portalLabel}`,
+    subject: `Reset Your Password — RepairBoy ${portalLabel}`,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#0f172a;">
         <div style="background:${bgColor};padding:24px 28px;border-radius:12px 12px 0 0;">
-          <h2 style="margin:0;color:#fff;font-size:1.3rem;">RepairTech ${portalLabel}</h2>
+          <h2 style="margin:0;color:#fff;font-size:1.3rem;">RepairBoy ${portalLabel}</h2>
         </div>
         <div style="padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
           <p style="margin:0 0 16px;">Hello <strong>${name}</strong>,</p>

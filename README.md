@@ -1,6 +1,6 @@
-# RepairTech Backend
+# RepairBoy Backend
 
-Node.js + Express + MongoDB API for the RepairTech frontend.
+Node.js + Express + MongoDB API for the RepairBoy frontend.
 
 ## Setup
 
