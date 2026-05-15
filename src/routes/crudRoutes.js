@@ -47,6 +47,8 @@ const prefixes = {
   staffExpenses: 'SEXP',
   staffPayments: 'SPAY',
   adminPayments: 'APAY',
+  customerAuth: 'CAUTH',
+  serviceRequests: 'SREQ',
 };
 
 const allowedCollections = new Set([
@@ -91,6 +93,7 @@ const allowedCollections = new Set([
   'staffExpenses',
   'staffPayments',
   'adminPayments',
+  'serviceRequests',
 ]);
 
 crudRouter.param('collection', (req, res, next, collection) => {
@@ -138,7 +141,7 @@ crudRouter.post('/:collection', async (req, res, next) => {
     const payload = req.params.collection === 'staff' ? { ...req.body, role: 'Staff' } : req.body;
     const created = await saveRecord(req.params.collection, payload, prefixes[req.params.collection]);
     if (req.params.collection === 'staff') {
-      await ensureStaffUser({ ...created, role: 'Staff' });
+      await ensureStaffUser({ ...created, role: 'Staff' }, { sendEmail: true });
     }
     return res.status(201).json(created);
   } catch (error) {

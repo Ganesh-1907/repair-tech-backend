@@ -22,6 +22,7 @@ const amcDetailsSchema = new mongoose.Schema({
   primaryContact: mongoose.Schema.Types.Mixed,
   secondaryContact: mongoose.Schema.Types.Mixed,
   devices: [mongoose.Schema.Types.Mixed],
+  quotation: mongoose.Schema.Types.Mixed,
 });
 
 const cmcDetailsSchema = new mongoose.Schema({
@@ -43,6 +44,7 @@ const cmcDetailsSchema = new mongoose.Schema({
   primaryContact: mongoose.Schema.Types.Mixed,
   secondaryContact: mongoose.Schema.Types.Mixed,
   devices: [mongoose.Schema.Types.Mixed],
+  quotation: mongoose.Schema.Types.Mixed,
 });
 
 const rentalDetailsSchema = new mongoose.Schema({

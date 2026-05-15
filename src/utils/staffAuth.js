@@ -1,11 +1,15 @@
 import bcrypt from 'bcryptjs';
 import { User } from '../models/User.js';
-
-export const STAFF_DEFAULT_PASSWORD = 'staff@123';
+import { sendStaffCredentialEmail } from '../services/emailService.js';
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
-export const ensureStaffUser = async (staff) => {
+const generatePassword = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+};
+
+export const ensureStaffUser = async (staff, { sendEmail = false } = {}) => {
   const email = normalizeEmail(staff.email);
   if (!email) return null;
 
@@ -25,10 +29,28 @@ export const ensureStaffUser = async (staff) => {
     return User.findById(user._id);
   }
 
-  return User.create({
+  const plainPassword = generatePassword();
+  const created = await User.create({
     ...payload,
-    passwordHash: await bcrypt.hash(STAFF_DEFAULT_PASSWORD, 10),
+    passwordHash: await bcrypt.hash(plainPassword, 10),
+    forcePasswordChange: true,
   });
+
+  if (sendEmail) {
+    const loginUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/login`;
+    try {
+      await sendStaffCredentialEmail({
+        to: email,
+        name: staff.name,
+        password: plainPassword,
+        loginUrl,
+      });
+    } catch (err) {
+      console.error('[Email] Failed to send staff credential email:', err.message);
+    }
+  }
+
+  return created;
 };
 
 export const removeStaffUser = async (staffId) => {

@@ -74,7 +74,7 @@ export const saveRecord = async (collection, payload, prefix = 'REC') => {
 
   const data = withCollectionFields(collection, { ...payload, id });
   const row = await Model.findOneAndUpdate(
-    { id, ...getCollectionQuery(collection) },
+    { id },
     { $set: data },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
