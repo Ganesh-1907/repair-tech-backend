@@ -2,6 +2,7 @@ import express from 'express';
 import { getRecord, listRecords, patchRecord, saveRecord } from '../utils/store.js';
 import { requireAuth } from '../middleware/auth.js';
 import { Job } from '../models/Job.js';
+import { sendRentalQuotationEmail, sendRentalAgreementEmail, sendAMCQuotationEmail, sendAMCAgreementEmail, sendCMCQuotationEmail, sendCMCAgreementEmail } from '../services/emailService.js';
 
 export const moduleRouter = express.Router();
 
@@ -1411,6 +1412,106 @@ moduleRouter.post('/rental/payments', async (req, res, next) => {
       });
     }
     res.status(201).json(payment);
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/email/rental-quotation', requireAuth, async (req, res, next) => {
+  try {
+    const { to, customerName, contactPerson, quoteNo, date, validity, grandTotal, pdfBase64 } = req.body;
+
+    if (!to) return res.status(400).json({ message: 'Customer email (to) is required.' });
+    if (!quoteNo) return res.status(400).json({ message: 'Quote number is required.' });
+
+    const result = await sendRentalQuotationEmail({
+      to, customerName, contactPerson, quoteNo, date, validity, grandTotal, pdfBase64,
+    });
+
+    res.json(result.skipped
+      ? { skipped: true, message: 'Email not configured on server — email skipped.' }
+      : { sent: true, message: `Quotation ${quoteNo} sent to ${to}.` }
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/email/rental-agreement', requireAuth, async (req, res, next) => {
+  try {
+    const { to, customerName, contactPerson, agreementNo, startDate, endDate, grandTotal, pdfBase64 } = req.body;
+
+    if (!to) return res.status(400).json({ message: 'Customer email (to) is required.' });
+    if (!agreementNo) return res.status(400).json({ message: 'Agreement number is required.' });
+
+    const result = await sendRentalAgreementEmail({
+      to, customerName, contactPerson, agreementNo, startDate, endDate, grandTotal, pdfBase64,
+    });
+
+    res.json(result.skipped
+      ? { skipped: true, message: 'Email not configured on server — email skipped.' }
+      : { sent: true, message: `Agreement ${agreementNo} sent to ${to}.` }
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/email/amc-quotation', requireAuth, async (req, res, next) => {
+  try {
+    const { to, customerName, contactPerson, quoteNo, date, validity, grandTotal, pdfBase64 } = req.body;
+    if (!to) return res.status(400).json({ message: 'Customer email (to) is required.' });
+    if (!quoteNo) return res.status(400).json({ message: 'Quote number is required.' });
+    const result = await sendAMCQuotationEmail({ to, customerName, contactPerson, quoteNo, date, validity, grandTotal, pdfBase64 });
+    res.json(result.skipped
+      ? { skipped: true, message: 'Email not configured on server — email skipped.' }
+      : { sent: true, message: `AMC Quotation ${quoteNo} sent to ${to}.` }
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/email/amc-agreement', requireAuth, async (req, res, next) => {
+  try {
+    const { to, customerName, contactPerson, agreementNo, startDate, endDate, grandTotal, pdfBase64 } = req.body;
+    if (!to) return res.status(400).json({ message: 'Customer email (to) is required.' });
+    if (!agreementNo) return res.status(400).json({ message: 'Agreement number is required.' });
+    const result = await sendAMCAgreementEmail({ to, customerName, contactPerson, agreementNo, startDate, endDate, grandTotal, pdfBase64 });
+    res.json(result.skipped
+      ? { skipped: true, message: 'Email not configured on server — email skipped.' }
+      : { sent: true, message: `AMC Agreement ${agreementNo} sent to ${to}.` }
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/email/cmc-quotation', requireAuth, async (req, res, next) => {
+  try {
+    const { to, customerName, contactPerson, quoteNo, date, validity, grandTotal, pdfBase64 } = req.body;
+    if (!to) return res.status(400).json({ message: 'Customer email (to) is required.' });
+    if (!quoteNo) return res.status(400).json({ message: 'Quote number is required.' });
+    const result = await sendCMCQuotationEmail({ to, customerName, contactPerson, quoteNo, date, validity, grandTotal, pdfBase64 });
+    res.json(result.skipped
+      ? { skipped: true, message: 'Email not configured on server — email skipped.' }
+      : { sent: true, message: `CMC Quotation ${quoteNo} sent to ${to}.` }
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/email/cmc-agreement', requireAuth, async (req, res, next) => {
+  try {
+    const { to, customerName, contactPerson, agreementNo, startDate, endDate, grandTotal, pdfBase64 } = req.body;
+    if (!to) return res.status(400).json({ message: 'Customer email (to) is required.' });
+    if (!agreementNo) return res.status(400).json({ message: 'Agreement number is required.' });
+    const result = await sendCMCAgreementEmail({ to, customerName, contactPerson, agreementNo, startDate, endDate, grandTotal, pdfBase64 });
+    res.json(result.skipped
+      ? { skipped: true, message: 'Email not configured on server — email skipped.' }
+      : { sent: true, message: `CMC Agreement ${agreementNo} sent to ${to}.` }
+    );
   } catch (error) {
     next(error);
   }

@@ -41,6 +41,9 @@ const customerSchema = new mongoose.Schema(
     quotation: mongoose.Schema.Types.Mixed,
     status: { type: String, default: 'Active' },
     locations: [locationSchema],
+    planId: String,
+    planName: String,
+    planDetails: mongoose.Schema.Types.Mixed,
   },
   { timestamps: true }
 );
