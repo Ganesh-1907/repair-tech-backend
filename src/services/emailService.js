@@ -405,3 +405,48 @@ export const sendCMCAgreementEmail = async ({
   console.log(`[Email] CMC agreement ${agreementNo} sent to ${to}`);
   return { sent: true };
 };
+
+export const sendLeadQuotationEmail = async ({
+  to, customerName, quoteNo, date, validity, grandTotal, pdfBase64,
+}) => {
+  const transporter = createTransporter();
+  if (!transporter) return { skipped: true };
+
+  const fmt = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const name = customerName || 'Customer';
+
+  const attachments = pdfBase64
+    ? [{ filename: `Estimate-${quoteNo}.pdf`, content: Buffer.from(pdfBase64, 'base64'), contentType: 'application/pdf' }]
+    : [];
+
+  await transporter.sendMail({
+    from: from(),
+    to,
+    subject: `Estimate ${quoteNo} — RepairBoy Enterprise`,
+    attachments,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:580px;margin:0 auto;color:#0f172a;">
+        <div style="background:#4f46e5;padding:24px 28px;border-radius:12px 12px 0 0;">
+          <h2 style="margin:0;color:#fff;font-size:1.3rem;letter-spacing:-0.3px;">REPAIRBOY ENTERPRISE</h2>
+          <p style="margin:4px 0 0;color:#c7d2fe;font-size:0.8rem;">Authorized Service Center</p>
+        </div>
+        <div style="padding:28px 28px 24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
+          <p style="margin:0 0 14px;font-size:1rem;">Hi <strong>${name}</strong>,</p>
+          <p style="margin:0 0 16px;color:#334155;line-height:1.6;">Thank you for your interest in RepairBoy Enterprise. Please find attached your estimate <strong>${quoteNo}</strong>${date ? ` dated <strong>${date}</strong>` : ''}.</p>
+          ${grandTotal ? `<p style="margin:0 0 16px;color:#334155;line-height:1.6;">The total estimated amount is <strong>₹${fmt(grandTotal)}</strong>.</p>` : ''}
+          ${validity ? `<p style="margin:0 0 16px;color:#334155;line-height:1.6;">This estimate is valid for <strong>${validity}</strong> from the date of issue.</p>` : ''}
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+            <p style="margin:0 0 6px;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#64748b;letter-spacing:0.05em;">Estimate Reference</p>
+            <p style="margin:0;font-size:1rem;font-weight:700;color:#0f172a;">${quoteNo}</p>
+            ${grandTotal ? `<p style="margin:4px 0 0;font-size:0.83rem;color:#64748b;">Total: ₹${fmt(grandTotal)}</p>` : ''}
+          </div>
+          <p style="margin:0 0 8px;color:#475569;font-size:0.87rem;">Please review the attached estimate and feel free to contact us if you have any questions or require any changes.</p>
+          <p style="margin:24px 0 0;color:#94a3b8;font-size:0.78rem;border-top:1px solid #f1f5f9;padding-top:16px;">This email was sent automatically by RepairBoy Enterprise · Leads Management</p>
+        </div>
+      </div>
+    `,
+  });
+
+  console.log(`[Email] Lead quotation ${quoteNo} sent to ${to}`);
+  return { sent: true };
+};

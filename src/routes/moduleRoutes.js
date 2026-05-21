@@ -2,7 +2,7 @@ import express from 'express';
 import { getRecord, listRecords, patchRecord, saveRecord } from '../utils/store.js';
 import { requireAuth } from '../middleware/auth.js';
 import { Job } from '../models/Job.js';
-import { sendRentalQuotationEmail, sendRentalAgreementEmail, sendAMCQuotationEmail, sendAMCAgreementEmail, sendCMCQuotationEmail, sendCMCAgreementEmail } from '../services/emailService.js';
+import { sendRentalQuotationEmail, sendRentalAgreementEmail, sendAMCQuotationEmail, sendAMCAgreementEmail, sendCMCQuotationEmail, sendCMCAgreementEmail, sendLeadQuotationEmail } from '../services/emailService.js';
 
 export const moduleRouter = express.Router();
 
@@ -1511,6 +1511,21 @@ moduleRouter.post('/email/cmc-agreement', requireAuth, async (req, res, next) =>
     res.json(result.skipped
       ? { skipped: true, message: 'Email not configured on server — email skipped.' }
       : { sent: true, message: `CMC Agreement ${agreementNo} sent to ${to}.` }
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/email/lead-quotation', requireAuth, async (req, res, next) => {
+  try {
+    const { to, customerName, quoteNo, date, validity, grandTotal, pdfBase64 } = req.body;
+    if (!to) return res.status(400).json({ message: 'Customer email (to) is required.' });
+    if (!quoteNo) return res.status(400).json({ message: 'Estimate number is required.' });
+    const result = await sendLeadQuotationEmail({ to, customerName, quoteNo, date, validity, grandTotal, pdfBase64 });
+    res.json(result.skipped
+      ? { skipped: true, message: 'Email not configured on server — email skipped.' }
+      : { sent: true, message: `Estimate ${quoteNo} sent to ${to}.` }
     );
   } catch (error) {
     next(error);
