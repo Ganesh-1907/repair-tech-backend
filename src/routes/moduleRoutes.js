@@ -1,5 +1,5 @@
 import express from 'express';
-import { getRecord, listRecords, patchRecord, saveRecord } from '../utils/store.js';
+import { getRecord, listRecords, patchRecord, removeRecord, saveRecord } from '../utils/store.js';
 import { requireAuth } from '../middleware/auth.js';
 import { Job } from '../models/Job.js';
 import { sendRentalQuotationEmail, sendRentalAgreementEmail, sendAMCQuotationEmail, sendAMCAgreementEmail, sendCMCQuotationEmail, sendCMCAgreementEmail, sendLeadQuotationEmail } from '../services/emailService.js';
@@ -1111,7 +1111,177 @@ moduleRouter.post('/staff/attendance', requireAuth, async (req, res, next) => {
       }).catch(() => null);
     }
 
+    const lat = Number(req.body.lat);
+    const lng = Number(req.body.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && (action === 'Clock In' || action === 'Clock Out')) {
+      await saveRecord('staffLocationLogs', {
+        staffId: staffProfile.id,
+        staffName: staffProfile.name,
+        staffEmail: staffProfile.email || '',
+        lat,
+        lng,
+        accuracy: Number(req.body.accuracy) || 0,
+        shiftDate: isoDate(now),
+        clockInId: action === 'Clock Out' ? (todayClockIn?.id || '') : (attendance.id || ''),
+        source: action === 'Clock In' ? 'clock-in' : 'clock-out',
+        loggedAt: now.toISOString(),
+      }, 'LOC').catch(() => null);
+    }
+
     res.status(201).json(attendance);
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.post('/staff/location', requireAuth, async (req, res, next) => {
+  try {
+    const user = req.user || {};
+    const staffRows = await listRecords('staff');
+    const staffProfile = getStaffProfileForUser(user, staffRows);
+
+    const lat = Number(req.body.lat);
+    const lng = Number(req.body.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ message: 'Valid lat and lng are required.' });
+    }
+    if (staffProfile.attendanceStatus !== 'Present') {
+      return res.status(400).json({ message: 'Location tracking is only active while clocked in.' });
+    }
+
+    const now = new Date();
+    const attendanceLogs = await listRecords('staffAttendance');
+    const todayClockIn = attendanceLogs.find((row) =>
+      recordBelongsToStaff(user, row, staffProfile) &&
+      row.action === 'Clock In' &&
+      isSameCalendarDay(row.loggedAt || row.createdAt, now)
+    );
+
+    const log = await saveRecord('staffLocationLogs', {
+      staffId: staffProfile.id,
+      staffName: staffProfile.name,
+      staffEmail: staffProfile.email || '',
+      lat,
+      lng,
+      accuracy: Number(req.body.accuracy) || 0,
+      shiftDate: isoDate(now),
+      clockInId: todayClockIn?.id || '',
+      source: 'ping',
+      loggedAt: now.toISOString(),
+    }, 'LOC');
+
+    res.status(201).json(log);
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.get('/admin/staff/live-locations', requireAuth, async (req, res, next) => {
+  try {
+    const user = req.user || {};
+    if (user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required.' });
+    }
+
+    const now = new Date();
+    const todayDate = isoDate(now);
+
+    const [staffRows, attendanceLogs, locationLogs] = await Promise.all([
+      listRecords('staff'),
+      listRecords('staffAttendance'),
+      listRecords('staffLocationLogs'),
+    ]);
+
+    const todayAttendance = attendanceLogs.filter((row) =>
+      isSameCalendarDay(row.loggedAt || row.createdAt, now)
+    );
+
+    const todayClockIns = {};
+    const todayClockOuts = {};
+    for (const row of todayAttendance) {
+      if (row.action === 'Clock In') todayClockIns[row.staffId] = row;
+      if (row.action === 'Clock Out') todayClockOuts[row.staffId] = row;
+    }
+
+    const todayLocations = locationLogs.filter((row) => row.shiftDate === todayDate);
+    const locationsByStaff = {};
+    for (const loc of todayLocations) {
+      if (!locationsByStaff[loc.staffId]) locationsByStaff[loc.staffId] = [];
+      locationsByStaff[loc.staffId].push(loc);
+    }
+
+    const result = Object.keys(todayClockIns).map((staffId) => {
+      const clockIn = todayClockIns[staffId];
+      const clockOut = todayClockOuts[staffId] || null;
+      const staffInfo = staffRows.find((s) => s.id === staffId) || {};
+      const route = (locationsByStaff[staffId] || [])
+        .sort((a, b) => new Date(a.loggedAt) - new Date(b.loggedAt));
+      const lastLocation = route[route.length - 1] || null;
+
+      return {
+        staffId,
+        staffName: clockIn.staffName || staffInfo.name || '',
+        attendanceStatus: clockOut ? 'Clocked Out' : 'Present',
+        clockInTime: clockIn.loggedAt,
+        clockOutTime: clockOut?.loggedAt || null,
+        lastLat: lastLocation?.lat ?? null,
+        lastLng: lastLocation?.lng ?? null,
+        lastSeenAt: lastLocation?.loggedAt || null,
+        route: route.map(({ lat, lng, loggedAt, source, accuracy }) => ({ lat, lng, loggedAt, source, accuracy })),
+      };
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+moduleRouter.get('/admin/staff/:staffId/location-history', requireAuth, async (req, res, next) => {
+  try {
+    const user = req.user || {};
+    if (user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required.' });
+    }
+
+    const { staffId } = req.params;
+    const now = new Date();
+    const cutoffDate = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
+
+    const allLogs = await listRecords('staffLocationLogs');
+
+    // Delete records older than 30 days (lazy cleanup)
+    const oldLogs = allLogs.filter((log) => (log.shiftDate || '') < cutoffDate);
+    await Promise.all(oldLogs.map((log) => removeRecord('staffLocationLogs', log.id).catch(() => null)));
+
+    const recentLogs = allLogs.filter((log) =>
+      log.staffId === staffId && (log.shiftDate || '') >= cutoffDate
+    );
+
+    const grouped = {};
+    for (const log of recentLogs) {
+      const date = log.shiftDate || isoDate(new Date(log.loggedAt || log.createdAt));
+      if (!grouped[date]) grouped[date] = [];
+      grouped[date].push(log);
+    }
+
+    const history = {};
+    for (const [date, logs] of Object.entries(grouped)) {
+      const route = logs
+        .sort((a, b) => new Date(a.loggedAt) - new Date(b.loggedAt))
+        .map(({ lat, lng, loggedAt, source, accuracy }) => ({ lat, lng, loggedAt, source, accuracy }));
+      history[date] = { count: route.length, route };
+    }
+
+    const staffRows = await listRecords('staff');
+    const staffInfo = staffRows.find((s) => s.id === staffId) || {};
+
+    res.json({
+      staffId,
+      staffName: staffInfo.name || recentLogs[0]?.staffName || '',
+      history,
+      datesWithData: Object.keys(history).sort().reverse(),
+    });
   } catch (error) {
     next(error);
   }
