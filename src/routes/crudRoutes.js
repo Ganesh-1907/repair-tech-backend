@@ -48,6 +48,7 @@ const prefixes = {
   cmcRepairs: 'CMCRPR',
   staffExpenses: 'SEXP',
   staffPayments: 'SPAY',
+  staffTargets: 'STGT',
   adminPayments: 'APAY',
   customerAuth: 'CAUTH',
   serviceRequests: 'SREQ',
@@ -96,6 +97,7 @@ const allowedCollections = new Set([
   'cmcRepairs',
   'staffExpenses',
   'staffPayments',
+  'staffTargets',
   'adminPayments',
   'serviceRequests',
 ]);

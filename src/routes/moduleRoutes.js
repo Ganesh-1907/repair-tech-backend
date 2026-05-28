@@ -259,7 +259,7 @@ const leadBelongsToUser = (user = {}, lead = {}) => isAssignedToUser(user, {
 });
 
 const getStaffPortalSummary = async (user = {}) => {
-  const [staffRows, jobs, leads, payments, expenses, attendanceLogs, regularizationRows] = await Promise.all([
+  const [staffRows, jobs, leads, payments, expenses, attendanceLogs, regularizationRows, targetRows] = await Promise.all([
     listRecords('staff'),
     Job.find({}).sort({ updatedAt: -1 }).lean(),
     listRecords('leads'),
@@ -267,6 +267,7 @@ const getStaffPortalSummary = async (user = {}) => {
     listRecords('staffExpenses'),
     listRecords('staffAttendance'),
     listRecords('staffAttendanceRegularizations'),
+    listRecords('staffTargets'),
   ]);
 
   const staffProfile = getStaffProfileForUser(user, staffRows);
@@ -321,6 +322,19 @@ const getStaffPortalSummary = async (user = {}) => {
   const todayPaymentTotal = sum(todayPayments, (row) => row.amount);
   const todayExpenseTotal = sum(todayExpenses, (row) => row.amount);
 
+  const currentMonthKey = monthKey(today);
+  const currentMonthStart = startOfMonth(today);
+  const nextMonthStart = addMonths(currentMonthStart, 1);
+  const staffTarget = targetRows.find((row) => row.staffId === staffProfile.id && row.month === currentMonthKey);
+  const monthlyTargetAmount = toNumber(staffTarget?.targetAmount || 0);
+  const monthPayments = staffPayments.filter((row) => {
+    const date = parseDate(row.paidOn || row.createdAt);
+    return date && date >= currentMonthStart && date < nextMonthStart;
+  });
+  const monthlyCollected = sum(monthPayments, (row) => row.amount);
+  const monthlyRemaining = Math.max(monthlyTargetAmount - monthlyCollected, 0);
+  const monthlyAchieved = monthlyTargetAmount ? Math.round((monthlyCollected / monthlyTargetAmount) * 100) : 0;
+
   return {
     profile: staffProfile,
     today: today.toISOString(),
@@ -357,6 +371,13 @@ const getStaffPortalSummary = async (user = {}) => {
     attendanceLogs: staffAttendance,
     todayAttendance,
     regularizationRequests,
+    target: {
+      month: currentMonthKey,
+      targetAmount: monthlyTargetAmount,
+      collected: monthlyCollected,
+      remaining: monthlyRemaining,
+      achieved: monthlyAchieved,
+    },
   };
 };
 
@@ -1070,6 +1091,14 @@ moduleRouter.post('/staff/attendance', requireAuth, async (req, res, next) => {
       }
     }
 
+    const lat = Number(req.body.lat);
+    const lng = Number(req.body.lng);
+    const hasValidLocation = Number.isFinite(lat) && Number.isFinite(lng);
+
+    if (action === 'Clock In' && !hasValidLocation) {
+      return res.status(400).json({ message: 'Location permission is required to clock in.' });
+    }
+
     const lateMinutes = action === 'Clock In' ? Math.max(Math.floor((now - shiftStart) / 60000), 0) : 0;
     const overtimeMinutes = action === 'Clock Out' ? Math.max(Math.floor((now - shiftEnd) / 60000), 0) : 0;
     const attendanceStatus = action === 'Mark Leave' ? 'On Leave' : action === 'Clock Out' ? 'Clocked Out' : 'Present';
@@ -1111,9 +1140,7 @@ moduleRouter.post('/staff/attendance', requireAuth, async (req, res, next) => {
       }).catch(() => null);
     }
 
-    const lat = Number(req.body.lat);
-    const lng = Number(req.body.lng);
-    if (Number.isFinite(lat) && Number.isFinite(lng) && (action === 'Clock In' || action === 'Clock Out')) {
+    if (hasValidLocation && (action === 'Clock In' || action === 'Clock Out')) {
       await saveRecord('staffLocationLogs', {
         staffId: staffProfile.id,
         staffName: staffProfile.name,
@@ -1365,6 +1392,37 @@ moduleRouter.post('/staff/expenses', requireAuth, async (req, res, next) => {
     res.status(201).json(expense);
   } catch (error) {
     next(error);
+  }
+});
+
+moduleRouter.post('/admin/staff/target', requireAuth, async (req, res, next) => {
+  try {
+    const user = req.user || {};
+    if (user.role === 'staff') return res.status(403).json({ message: 'Admin access required.' });
+
+    const { staffId, month, targetAmount } = req.body;
+    if (!staffId) return res.status(400).json({ message: 'Staff ID is required.' });
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ message: 'Month is required in YYYY-MM format.' });
+    const amount = toNumber(targetAmount);
+    if (amount <= 0) return res.status(400).json({ message: 'Target amount must be greater than zero.' });
+
+    const staffRows = await listRecords('staff');
+    const staff = staffRows.find((row) => row.id === staffId);
+    if (!staff) return res.status(404).json({ message: 'Staff not found.' });
+
+    const targets = await listRecords('staffTargets');
+    const existing = targets.find((row) => row.staffId === staffId && row.month === month);
+
+    let target;
+    if (existing) {
+      target = await patchRecord('staffTargets', existing.id, { targetAmount: amount });
+    } else {
+      target = await saveRecord('staffTargets', { staffId, staffName: staff.name, month, targetAmount: amount }, 'STGT');
+    }
+
+    return res.status(existing ? 200 : 201).json(target);
+  } catch (error) {
+    return next(error);
   }
 });
 
