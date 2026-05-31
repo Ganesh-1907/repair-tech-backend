@@ -75,10 +75,16 @@ export const saveRecord = async (collection, payload, prefix = 'REC') => {
   let data = withCollectionFields(collection, { ...payload, id });
 
   // rentalAssets share the Asset collection but must not own the inventory-level
-  // unique fields — those belong to the inventory record only.
+  // unique indexed fields. We use $unset (not just omitting from $set) because
+  // MongoDB sparse indexes still index null — only truly absent keys are skipped.
   if (collection === 'rentalAssets') {
     const { serialNumber, assetTag, ...rest } = data;
-    data = rest;
+    const row = await Model.findOneAndUpdate(
+      { id },
+      { $set: rest, $unset: { serialNumber: '', assetTag: '' } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    return toClientRecord(row, false);
   }
 
   const row = await Model.findOneAndUpdate(
