@@ -68,6 +68,17 @@ const assetSchema = new mongoose.Schema(
     lifecycleLogs: [lifecycleLogSchema],
     qrTag: String,
     barcodeTag: String,
+    payment: {
+      totalAmount: { type: Number, default: null },
+      dueDate: { type: String, default: null },
+      rows: [
+        {
+          mode: { type: String },
+          amount: { type: Number },
+          txnId: { type: String },
+        },
+      ],
+    },
   },
   { timestamps: true }
 );
