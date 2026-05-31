@@ -72,7 +72,15 @@ export const saveRecord = async (collection, payload, prefix = 'REC') => {
     return toClientRecord(row, true);
   }
 
-  const data = withCollectionFields(collection, { ...payload, id });
+  let data = withCollectionFields(collection, { ...payload, id });
+
+  // rentalAssets share the Asset collection but must not own the inventory-level
+  // unique fields — those belong to the inventory record only.
+  if (collection === 'rentalAssets') {
+    const { serialNumber, assetTag, ...rest } = data;
+    data = rest;
+  }
+
   const row = await Model.findOneAndUpdate(
     { id },
     { $set: data },
