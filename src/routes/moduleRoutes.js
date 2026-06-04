@@ -297,8 +297,10 @@ const getStaffPortalSummary = async (user = {}) => {
   const todayPayments = staffPayments.filter((row) => isSameCalendarDay(row.paidOn || row.createdAt, today));
   const todayExpenses = staffExpenses.filter((row) => isSameCalendarDay(row.spentOn || row.createdAt, today));
   const todayAttendance = staffAttendance.filter((row) => isSameCalendarDay(row.loggedAt || row.createdAt, today));
-  const clockIn = todayAttendance.find((row) => row.action === 'Clock In');
-  const clockOut = todayAttendance.find((row) => row.action === 'Clock Out');
+  const sortedToday = [...todayAttendance].sort((a, b) => new Date(a.loggedAt || a.createdAt) - new Date(b.loggedAt || b.createdAt));
+  const clockIn = [...sortedToday].reverse().find((row) => row.action === 'Clock In') || null;
+  const clockOut = clockIn ? sortedToday.find((row) => row.action === 'Clock Out' && new Date(row.loggedAt || row.createdAt) > new Date(clockIn.loggedAt || clockIn.createdAt)) || null : null;
+  const isCurrentlyClockedIn = Boolean(clockIn && !clockOut);
   const missedClockOut = staffAttendance.find((row) => {
     if (row.action !== 'Clock In' || isSameCalendarDay(row.loggedAt || row.createdAt, today)) return false;
     const clockInDate = parseDate(row.loggedAt || row.createdAt);
@@ -358,9 +360,9 @@ const getStaffPortalSummary = async (user = {}) => {
       dayCutoff: endOfDay(today).toISOString(),
       clockIn: clockIn || null,
       clockOut: clockOut || null,
-      isClockedIn: Boolean(clockIn && !clockOut),
-      canClockIn: !clockIn,
-      canClockOut: Boolean(clockIn && !clockOut),
+      isClockedIn: isCurrentlyClockedIn,
+      canClockIn: !isCurrentlyClockedIn,
+      canClockOut: isCurrentlyClockedIn,
       lateMinutes: toNumber(clockIn?.lateMinutes),
       monthlyLateCount,
       overtimeMinutes: toNumber(clockOut?.overtimeMinutes),
@@ -1069,12 +1071,13 @@ moduleRouter.post('/staff/attendance/regularize', requireAuth, async (req, res, 
     const staffAttendance = attendanceLogs.filter((row) => recordBelongsToStaff(user, row, staffProfile));
     const date = parseDate(req.body.date);
     const requestedClockOutAt = parseDate(req.body.clockOutTime);
+    const requestedClockInAt = req.body.clockInTime ? parseDate(req.body.clockInTime) : null;
     const reason = String(req.body.reason || '').trim();
 
     if (!date) return res.status(400).json({ message: 'Attendance date is required.' });
     if (!requestedClockOutAt) return res.status(400).json({ message: 'Clock-out time is required.' });
     if (!reason) return res.status(400).json({ message: 'Reason is required for regularization.' });
-    if (isSameCalendarDay(date, new Date())) return res.status(400).json({ message: 'Today can be clocked out from dashboard until 12:00 AM.' });
+    if (isSameCalendarDay(date, new Date())) return res.status(400).json({ message: 'Today can be regularized from dashboard after the day ends.' });
     if (!isSameCalendarDay(requestedClockOutAt, date)) return res.status(400).json({ message: 'Clock-out time must be on the selected attendance date.' });
 
     const clockIn = staffAttendance.find((row) => row.action === 'Clock In' && isSameCalendarDay(row.loggedAt || row.createdAt, date));
@@ -1085,10 +1088,12 @@ moduleRouter.post('/staff/attendance/regularize', requireAuth, async (req, res, 
       && isSameCalendarDay(row.attendanceDate, date)
     ));
 
-    if (!clockIn) return res.status(400).json({ message: 'No clock-in found for this date.' });
-    if (clockOut) return res.status(400).json({ message: 'This date already has a clock-out record.' });
+    if (!clockIn && !requestedClockInAt) return res.status(400).json({ message: 'No clock-in found. Provide clock-in time for absent day regularization.' });
+    if (clockOut) return res.status(400).json({ message: 'This date already has a complete attendance record.' });
     if (existingPending) return res.status(400).json({ message: 'Regularization request is already pending for this date.' });
-    if (requestedClockOutAt <= parseDate(clockIn.loggedAt || clockIn.createdAt)) {
+
+    const effectiveClockInAt = clockIn ? parseDate(clockIn.loggedAt || clockIn.createdAt) : requestedClockInAt;
+    if (requestedClockOutAt <= effectiveClockInAt) {
       return res.status(400).json({ message: 'Clock-out time must be after clock-in time.' });
     }
 
@@ -1097,8 +1102,10 @@ moduleRouter.post('/staff/attendance/regularize', requireAuth, async (req, res, 
       staffName: staffProfile.name,
       staffEmail: staffProfile.email,
       attendanceDate: isoDate(date),
-      clockInId: clockIn.id,
-      clockInAt: clockIn.loggedAt || clockIn.createdAt,
+      isAbsentDay: !clockIn,
+      clockInId: clockIn?.id || null,
+      clockInAt: clockIn ? (clockIn.loggedAt || clockIn.createdAt) : null,
+      requestedClockInAt: !clockIn && requestedClockInAt ? requestedClockInAt.toISOString() : null,
       requestedClockOutAt: requestedClockOutAt.toISOString(),
       reason,
       status: 'Pending',
@@ -1131,8 +1138,18 @@ moduleRouter.patch('/staff/attendance/regularizations/:id', requireAuth, async (
         && isSameCalendarDay(row.loggedAt || row.createdAt, request.attendanceDate)
       ));
       if (!existingClockOut) {
-        const clockInAt = parseDate(request.clockInAt);
+        const clockInAt = request.isAbsentDay && request.requestedClockInAt
+          ? parseDate(request.requestedClockInAt)
+          : parseDate(request.clockInAt);
         const clockOutAt = parseDate(request.requestedClockOutAt);
+
+        if (request.isAbsentDay && request.requestedClockInAt) {
+          await saveRecord('staffAttendance', {
+            staffId: request.staffId, staffName: request.staffName, staffEmail: request.staffEmail,
+            action: 'Clock In', status: 'Regularized', notes: request.reason, reason: request.reason,
+            regularizationRequestId: request.id, regularized: true, loggedAt: clockInAt.toISOString(),
+          }, 'ATT');
+        }
         const shiftEnd = staffShiftEndFor(clockOutAt);
         const generated = await saveRecord('staffAttendance', {
           staffId: request.staffId,
@@ -1184,19 +1201,20 @@ moduleRouter.post('/staff/attendance', requireAuth, async (req, res, next) => {
     const action = req.body.action || 'Clock In';
     const now = new Date();
     const todayAttendance = staffAttendance.filter((row) => isSameCalendarDay(row.loggedAt || row.createdAt, now));
-    const todayClockIn = todayAttendance.find((row) => row.action === 'Clock In');
-    const todayClockOut = todayAttendance.find((row) => row.action === 'Clock Out');
+    const sortedTodayAtt = [...todayAttendance].sort((a, b) => new Date(a.loggedAt || a.createdAt) - new Date(b.loggedAt || b.createdAt));
+    const lastClockIn = [...sortedTodayAtt].reverse().find((row) => row.action === 'Clock In') || null;
+    const activeClockOut = lastClockIn ? sortedTodayAtt.find((row) => row.action === 'Clock Out' && new Date(row.loggedAt || row.createdAt) > new Date(lastClockIn.loggedAt || lastClockIn.createdAt)) : null;
+    const isCurrentlyIn = Boolean(lastClockIn && !activeClockOut);
     const shiftStart = staffShiftStartFor(now);
     const shiftEnd = staffShiftEndFor(now);
     const dayCutoff = endOfDay(now);
 
-    if (action === 'Clock In' && todayClockIn) {
-      return res.status(400).json({ message: 'You have already clocked in today.' });
+    if (action === 'Clock In' && isCurrentlyIn) {
+      return res.status(400).json({ message: 'You are already clocked in. Please clock out first.' });
     }
 
     if (action === 'Clock Out') {
-      if (!todayClockIn) return res.status(400).json({ message: 'Clock-in is required before clock-out.' });
-      if (todayClockOut) return res.status(400).json({ message: 'You have already clocked out today.' });
+      if (!isCurrentlyIn) return res.status(400).json({ message: 'Clock-in is required before clock-out.' });
       if (now >= dayCutoff) return res.status(400).json({ message: 'Today clock-out is closed after 12:00 AM.' });
       if (now > shiftEnd && !String(req.body.reason || req.body.notes || '').trim()) {
         return res.status(400).json({ message: 'Reason is mandatory for extra work after scheduled logout time.' });
@@ -1240,7 +1258,7 @@ moduleRouter.post('/staff/attendance', requireAuth, async (req, res, next) => {
       lateMinutes,
       overtimeMinutes,
       monthlyLateCount,
-      pairedClockInId: action === 'Clock Out' ? todayClockIn?.id || '' : '',
+      pairedClockInId: action === 'Clock Out' ? lastClockIn?.id || '' : '',
       loggedAt: now.toISOString(),
     }, 'ATT');
 
@@ -1385,7 +1403,7 @@ moduleRouter.get('/admin/staff/:staffId/location-history', requireAuth, async (r
 
     const { staffId } = req.params;
     const now = new Date();
-    const cutoffDate = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
+    const cutoffDate = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 39));
 
     const allLogs = await listRecords('staffLocationLogs');
 
