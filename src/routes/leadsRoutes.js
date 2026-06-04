@@ -1,5 +1,7 @@
 import express from 'express';
 import { saveRecord } from '../utils/store.js';
+import { requireAuth } from '../middleware/auth.js';
+import { isCaAdminRole } from '../utils/roles.js';
 
 export const leadsRouter = express.Router();
 
@@ -95,8 +97,12 @@ const validateLead = (payload) => {
   };
 };
 
-leadsRouter.post('/', async (req, res, next) => {
+leadsRouter.post('/', requireAuth, async (req, res, next) => {
   try {
+    if (isCaAdminRole(req.user?.role)) {
+      return res.status(403).json({ message: 'CA Admin access is read-only.' });
+    }
+
     const { errors, data } = validateLead(req.body);
     if (Object.keys(errors).length > 0) {
       return res.status(400).json({ message: 'Lead validation failed.', errors });

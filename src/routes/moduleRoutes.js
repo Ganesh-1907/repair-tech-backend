@@ -3,6 +3,8 @@ import { getRecord, listRecords, patchRecord, removeRecord, saveRecord } from '.
 import { requireAuth } from '../middleware/auth.js';
 import { Job } from '../models/Job.js';
 import { sendRentalQuotationEmail, sendRentalAgreementEmail, sendAMCQuotationEmail, sendAMCAgreementEmail, sendCMCQuotationEmail, sendCMCAgreementEmail, sendLeadQuotationEmail } from '../services/emailService.js';
+import { getInvoiceDateValue, getInvoiceGstAmount, getInvoiceTaxableAmount, getInvoiceTotalAmount, hasInvoiceGst } from '../utils/gst.js';
+import { isCaAdminRole } from '../utils/roles.js';
 
 export const moduleRouter = express.Router();
 
@@ -405,6 +407,104 @@ const buildRevenueRows = ({ billingInvoices, rentalInvoices, amcInvoices, cmcInv
   ...cmcInvoices.map((row) => ({ ...row, source: 'CMC' })),
 ];
 
+const buildGstRows = ({ billingInvoices = [], leadBillings = [], rentalInvoices = [], amcInvoices = [], cmcInvoices = [] }) => [
+  ...billingInvoices.map((row) => ({ ...row, source: 'Billing' })),
+  ...leadBillings.map((row) => ({ ...row, source: 'Lead Billing' })),
+  ...rentalInvoices.map((row) => ({ ...row, source: 'Rental' })),
+  ...amcInvoices.map((row) => ({ ...row, source: 'AMC' })),
+  ...cmcInvoices.map((row) => ({ ...row, source: 'CMC' })),
+]
+  .filter(hasInvoiceGst)
+  .map((row) => ({
+    ...row,
+    gstAmount: getInvoiceGstAmount(row),
+    taxableAmount: getInvoiceTaxableAmount(row),
+    totalAmount: getInvoiceTotalAmount(row),
+    invoiceDate: getInvoiceDateValue(row),
+  }));
+
+const buildCaGstDashboard = ({ billingInvoices, leadBillings, rentalInvoices, amcInvoices, cmcInvoices }, today = new Date()) => {
+  const gstRows = buildGstRows({ billingInvoices, leadBillings, rentalInvoices, amcInvoices, cmcInvoices });
+  const allInvoiceCount = billingInvoices.length + leadBillings.length + rentalInvoices.length + amcInvoices.length + cmcInvoices.length;
+  const nonGstInvoiceCount = Math.max(allInvoiceCount - gstRows.length, 0);
+  const currentMonth = startOfMonth(today);
+  const previousMonth = addMonths(currentMonth, -1);
+  const months = Array.from({ length: 6 }, (_, index) => addMonths(currentMonth, index - 5));
+
+  const monthRows = (month) => {
+    const key = monthKey(month);
+    return gstRows.filter((row) => {
+      const date = parseDate(row.invoiceDate);
+      return date && monthKey(date) === key;
+    });
+  };
+
+  const currentRows = gstRows.filter((row) => {
+    const date = parseDate(row.invoiceDate);
+    return date && date >= currentMonth;
+  });
+  const previousRows = gstRows.filter((row) => {
+    const date = parseDate(row.invoiceDate);
+    return date && date >= previousMonth && date < currentMonth;
+  });
+
+  const totalGst = sum(gstRows, (row) => row.gstAmount);
+  const totalSales = sum(gstRows, (row) => row.totalAmount);
+  const taxableBase = sum(gstRows, (row) => row.taxableAmount);
+  const paidGst = sum(gstRows.filter((row) => String(row.paymentStatus || row.status || '').toLowerCase().includes('paid')), (row) => row.gstAmount);
+  const pendingGst = Math.max(totalGst - paidGst, 0);
+  const currentGst = sum(currentRows, (row) => row.gstAmount);
+  const previousGst = sum(previousRows, (row) => row.gstAmount);
+
+  const bySource = gstRows.reduce((acc, row) => {
+    acc[row.source] = acc[row.source] || { source: row.source, count: 0, gst: 0 };
+    acc[row.source].count += 1;
+    acc[row.source].gst += row.gstAmount;
+    return acc;
+  }, {});
+  const sourceRows = Object.values(bySource).sort((a, b) => b.gst - a.gst);
+  const monthlySales = months.map((month) => sum(monthRows(month), (row) => row.totalAmount));
+  const monthlyGst = months.map((month) => sum(monthRows(month), (row) => row.gstAmount));
+
+  return {
+    isCaDashboard: true,
+    metrics: [
+      { label: 'Total GST Collected', value: totalGst, type: 'currency', trend: formatSignedPercent(currentGst, previousGst) },
+      { label: 'GST Invoice Sales', value: totalSales, type: 'currency', trend: formatSignedPercent(sum(currentRows, (row) => row.totalAmount), sum(previousRows, (row) => row.totalAmount)) },
+      { label: 'GST Invoices', value: gstRows.length, type: 'number', trend: formatSignedNumber(currentRows.length, previousRows.length) },
+      { label: 'Pending GST', value: pendingGst, type: 'currency', trend: '0%' },
+      { label: 'Paid GST', value: paidGst, type: 'currency', trend: '0%' },
+      { label: 'Taxable Base', value: taxableBase, type: 'currency', trend: '0%' },
+    ],
+    charts: {
+      revenueVsTarget: {
+        labels: months.map(monthLabel),
+        revenue: monthlySales,
+        target: monthlyGst,
+      },
+      leadStatus: {
+        labels: sourceRows.map((row) => row.source),
+        data: sourceRows.map((row) => row.gst),
+      },
+      responseTime: {
+        labels: months.map(monthLabel),
+        data: monthlyGst,
+      },
+    },
+    staffPerformance: sourceRows.map((row) => ({ id: row.source, name: row.source, revenue: row.gst, assignedJobs: row.count })),
+    expiryReminders: [],
+    inventoryAlerts: [],
+    alerts: [],
+    notifications: [
+      { label: 'GST invoice records', value: gstRows.length, tone: 'success' },
+      { label: 'Non-GST records hidden', value: nonGstInvoiceCount, tone: nonGstInvoiceCount ? 'warning' : 'success' },
+      { label: 'Rental GST invoices', value: (bySource.Rental?.count || 0), tone: 'info' },
+      { label: 'AMC / CMC GST invoices', value: (bySource.AMC?.count || 0) + (bySource.CMC?.count || 0), tone: 'info' },
+    ],
+    periodLabel: months.length ? `${monthLabel(months[0])} - ${monthLabel(months[months.length - 1])}` : '',
+  };
+};
+
 const buildInventoryAlerts = (inventory, campaignInventoryParts) => {
   const inventoryAlerts = inventory
     .filter((item) => item.currentStock !== undefined && item.minStock !== undefined && toNumber(item.currentStock) <= toNumber(item.minStock))
@@ -658,6 +758,7 @@ moduleRouter.get('/dashboard/summary', requireAuth, async (req, res, next) => {
       allPendingJobs,
       allCampaignJobs,
       billingInvoices,
+      leadBillings,
       rentalInvoices,
       amcInvoices,
       cmcInvoices,
@@ -673,6 +774,7 @@ moduleRouter.get('/dashboard/summary', requireAuth, async (req, res, next) => {
       listRecords('pendingJobs'),
       listRecords('campaignJobs'),
       listRecords('billingInvoices'),
+      listRecords('leadBillings'),
       listRecords('rentalInvoices'),
       listRecords('amcInvoices'),
       listRecords('cmcInvoices'),
@@ -683,6 +785,16 @@ moduleRouter.get('/dashboard/summary', requireAuth, async (req, res, next) => {
       listRecords('cmcContracts'),
       listRecords('rentalContracts'),
     ]);
+
+    if (isCaAdminRole(user.role)) {
+      return res.json(buildCaGstDashboard({
+        billingInvoices,
+        leadBillings,
+        rentalInvoices,
+        amcInvoices,
+        cmcInvoices,
+      }));
+    }
 
     // Filter data if user is staff
     const leads = allLeads.filter(lead => isAssignedToUser(user, { 

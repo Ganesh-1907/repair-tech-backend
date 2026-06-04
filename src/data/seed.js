@@ -16,6 +16,7 @@ import { Alert } from '../models/Alert.js';
 import { seedRecords } from './seedData.js';
 import { modelMap } from '../utils/modelRegistry.js';
 import { ensureStaffUser } from '../utils/staffAuth.js';
+import { staffLoginRoles } from '../utils/roles.js';
 
 export const seedDatabase = async ({ reset = false, demo = false } = {}) => {
   const adminEmail = 'gamya.pilli@gmail.com';
@@ -29,7 +30,7 @@ export const seedDatabase = async ({ reset = false, demo = false } = {}) => {
   };
 
   if (reset) {
-    await User.deleteMany({ $or: [{ email: { $in: [adminEmail, ...legacyAdminEmails] } }, { role: 'staff' }] });
+    await User.deleteMany({ $or: [{ email: { $in: [adminEmail, ...legacyAdminEmails] } }, { role: { $in: staffLoginRoles } }] });
     await Record.deleteMany({}); // Delete all records during reset
     await Customer.deleteMany({});
     await Staff.deleteMany({});

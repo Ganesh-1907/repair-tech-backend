@@ -1,8 +1,11 @@
 import express from 'express';
 import { Record } from '../models/Record.js';
+import { requireAuth } from '../middleware/auth.js';
 import { getRecord, listRecords, patchRecord, removeRecord, saveRecord } from '../utils/store.js';
 import { seedRecords } from '../data/seedData.js';
 import { ensureStaffUser, removeStaffUser } from '../utils/staffAuth.js';
+import { hasInvoiceGst } from '../utils/gst.js';
+import { isCaAdminRole } from '../utils/roles.js';
 
 export const crudRouter = express.Router();
 
@@ -104,6 +107,55 @@ const allowedCollections = new Set([
   'serviceRequests',
 ]);
 
+const caAdminReadableCollections = new Set([
+  'leads',
+  'leadBillings',
+  'billingInvoices',
+  'rentalCustomers',
+  'rentalContracts',
+  'rentalInvoices',
+  'amcContracts',
+  'amcInvoices',
+  'cmcContracts',
+  'cmcInvoices',
+  'inventory',
+  'assets',
+  'expenses',
+  'staffExpenses',
+  'adminPayments',
+  'staffPayments',
+  'campaignJobs',
+]);
+
+const caAdminGstCollections = new Set([
+  'leadBillings',
+  'billingInvoices',
+  'rentalInvoices',
+  'amcInvoices',
+  'cmcInvoices',
+]);
+
+const filterRecordsForRole = (user, collection, rows) => {
+  if (!isCaAdminRole(user?.role)) return rows;
+  if (!caAdminReadableCollections.has(collection)) return [];
+  if (caAdminGstCollections.has(collection)) return rows.filter(hasInvoiceGst);
+  return rows;
+};
+
+const canReadRecordForRole = (user) => {
+  if (!isCaAdminRole(user?.role)) return true;
+  return false;
+};
+
+const blockCaAdminWrite = (req, res, next) => {
+  if (isCaAdminRole(req.user?.role)) {
+    return res.status(403).json({ message: 'CA Admin access is read-only.' });
+  }
+  return next();
+};
+
+crudRouter.use(requireAuth);
+
 crudRouter.param('collection', (req, res, next, collection) => {
   if (!allowedCollections.has(collection)) {
     return res.status(404).json({ message: `Unknown collection: ${collection}` });
@@ -113,7 +165,8 @@ crudRouter.param('collection', (req, res, next, collection) => {
 
 crudRouter.get('/:collection', async (req, res, next) => {
   try {
-    res.json(await listRecords(req.params.collection));
+    const rows = await listRecords(req.params.collection);
+    res.json(filterRecordsForRole(req.user, req.params.collection, rows));
   } catch (error) {
     next(error);
   }
@@ -122,14 +175,16 @@ crudRouter.get('/:collection', async (req, res, next) => {
 crudRouter.get('/:collection/:id', async (req, res, next) => {
   try {
     const row = await getRecord(req.params.collection, req.params.id);
-    if (!row) return res.status(404).json({ message: 'Record not found' });
+    if (!row || !canReadRecordForRole(req.user)) {
+      return res.status(404).json({ message: 'Record not found' });
+    }
     return res.json(row);
   } catch (error) {
     return next(error);
   }
 });
 
-crudRouter.post('/:collection', async (req, res, next) => {
+crudRouter.post('/:collection', blockCaAdminWrite, async (req, res, next) => {
   try {
     if (req.params.collection === 'rentalQuotations' && req.body?.customerId) {
       const existingRows = await listRecords('rentalQuotations');
@@ -146,10 +201,9 @@ crudRouter.post('/:collection', async (req, res, next) => {
       }
     }
 
-    const payload = req.params.collection === 'staff' ? { ...req.body, role: 'Staff' } : req.body;
-    const created = await saveRecord(req.params.collection, payload, prefixes[req.params.collection]);
+    const created = await saveRecord(req.params.collection, req.body, prefixes[req.params.collection]);
     if (req.params.collection === 'staff') {
-      await ensureStaffUser({ ...created, role: 'Staff' }, { sendEmail: true });
+      await ensureStaffUser(created, { sendEmail: true });
     }
     return res.status(201).json(created);
   } catch (error) {
@@ -157,12 +211,11 @@ crudRouter.post('/:collection', async (req, res, next) => {
   }
 });
 
-crudRouter.put('/:collection/:id', async (req, res, next) => {
+crudRouter.put('/:collection/:id', blockCaAdminWrite, async (req, res, next) => {
   try {
-    const payload = req.params.collection === 'staff' ? { ...req.body, role: 'Staff' } : req.body;
-    const updated = await saveRecord(req.params.collection, { ...payload, id: req.params.id }, prefixes[req.params.collection]);
+    const updated = await saveRecord(req.params.collection, { ...req.body, id: req.params.id }, prefixes[req.params.collection]);
     if (req.params.collection === 'staff') {
-      await ensureStaffUser({ ...updated, role: 'Staff' });
+      await ensureStaffUser(updated);
     }
     return res.json(updated);
   } catch (error) {
@@ -170,12 +223,12 @@ crudRouter.put('/:collection/:id', async (req, res, next) => {
   }
 });
 
-crudRouter.patch('/:collection/:id', async (req, res, next) => {
+crudRouter.patch('/:collection/:id', blockCaAdminWrite, async (req, res, next) => {
   try {
     const updated = await patchRecord(req.params.collection, req.params.id, req.body);
     if (!updated) return res.status(404).json({ message: 'Record not found' });
     if (req.params.collection === 'staff') {
-      await ensureStaffUser({ ...updated, role: 'Staff' });
+      await ensureStaffUser(updated);
     }
     return res.json(updated);
   } catch (error) {
@@ -183,7 +236,7 @@ crudRouter.patch('/:collection/:id', async (req, res, next) => {
   }
 });
 
-crudRouter.delete('/:collection/:id', async (req, res, next) => {
+crudRouter.delete('/:collection/:id', blockCaAdminWrite, async (req, res, next) => {
   try {
     const deleted = await removeRecord(req.params.collection, req.params.id);
     if (!deleted) return res.status(404).json({ message: 'Record not found' });
@@ -196,7 +249,7 @@ crudRouter.delete('/:collection/:id', async (req, res, next) => {
   }
 });
 
-crudRouter.post('/:collection/reset', async (req, res, next) => {
+crudRouter.post('/:collection/reset', blockCaAdminWrite, async (req, res, next) => {
   try {
     const rows = seedRecords[req.params.collection] || [];
     await Record.deleteMany({ bucket: req.params.collection });

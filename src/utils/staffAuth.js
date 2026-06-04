@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { User } from '../models/User.js';
 import { sendStaffCredentialEmail } from '../services/emailService.js';
+import { normalizeRole } from './roles.js';
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
@@ -20,7 +21,7 @@ export const ensureStaffUser = async (staff, { sendEmail = false } = {}) => {
   const payload = {
     name: staff.name,
     email,
-    role: 'staff',
+    role: normalizeRole(staff.role) || 'staff',
     staffId: staff.id,
   };
 

@@ -6,6 +6,7 @@ import { User } from '../models/User.js';
 import { requireAuth } from '../middleware/auth.js';
 import { listRecords, saveRecord } from '../utils/store.js';
 import { sendCredentialEmail, sendPasswordResetEmail } from '../services/emailService.js';
+import { normalizeRole } from '../utils/roles.js';
 
 export const authRouter = express.Router();
 
@@ -15,7 +16,7 @@ const publicUser = (user) => ({
   id: user._id.toString(),
   name: user.name,
   email: user.email,
-  role: user.role,
+  role: normalizeRole(user.role),
   staffId: user.staffId,
   forcePasswordChange: user.forcePasswordChange || false,
 });
