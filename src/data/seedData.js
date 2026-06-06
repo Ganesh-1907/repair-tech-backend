@@ -430,4 +430,22 @@ export const seedRecords = {
     { id: 'PRT-CMC-401', partName: 'Laptop Battery (4-Cell)', sku: 'BAT-DL-7420', qty: 1, unitCost: 4500, totalCost: 4500, covered: true, deducted: true, contractId: 'CMC-2026-001', date: '2026-03-20' },
     { id: 'PRT-CMC-402', partName: 'Printer Fuser Kit', sku: 'FUS-HP-M404', qty: 1, unitCost: 12000, totalCost: 12000, covered: true, deducted: true, contractId: 'CMC-2026-001', date: '2026-04-05' },
   ],
+  websiteRentals: [
+    { id: 'WEBRENT-001', name: 'Laptop Rental', price: 'from ₹1,499/mo' },
+    { id: 'WEBRENT-002', name: 'Desktop Rental', price: 'from ₹1,299/mo' },
+    { id: 'WEBRENT-003', name: 'Printer Rental', price: 'from ₹999/mo' },
+    { id: 'WEBRENT-004', name: 'CCTV Rental Setup', price: 'from ₹2,999/mo' },
+    { id: 'WEBRENT-005', name: 'Projector Rental', price: 'from ₹799/day' },
+    { id: 'WEBRENT-006', name: 'Networking Device Rental', price: 'from ₹999/mo' },
+  ],
+  websiteServices: [
+    { id: 'WEBSVC-001', name: 'Data Backup', price: '₹499' },
+    { id: 'WEBSVC-002', name: 'Antivirus Installation', price: '₹699' },
+    { id: 'WEBSVC-003', name: 'Remote Support', price: '₹299/session' },
+    { id: 'WEBSVC-004', name: 'Emergency Visit', price: '₹999' },
+    { id: 'WEBSVC-005', name: 'Network Setup', price: 'from ₹1,499' },
+    { id: 'WEBSVC-006', name: 'CCTV Mobile App Setup', price: '₹499' },
+    { id: 'WEBSVC-007', name: 'Printer Network Sharing', price: '₹699' },
+    { id: 'WEBSVC-008', name: 'Device Deep Cleaning', price: '₹599' },
+  ],
 };

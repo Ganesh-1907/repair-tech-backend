@@ -42,9 +42,11 @@ const normalizeImages = (value) => Array.isArray(value)
     .filter((item) => item && typeof item === 'object')
     .map((item) => ({
       name: trimString(item.name),
-      dataUrl: trimString(item.dataUrl),
+      url: trimString(item.url || ''),
+      dataUrl: trimString(item.dataUrl || ''),
+      key: trimString(item.key || ''),
     }))
-    .filter((item) => item.dataUrl)
+    .filter((item) => item.url || item.dataUrl || item.key)
   : [];
 
 const buildTracker = (serviceType, hasAssignee) => {

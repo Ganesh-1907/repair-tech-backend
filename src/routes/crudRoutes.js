@@ -56,6 +56,8 @@ const prefixes = {
   adminPayments: 'APAY',
   customerAuth: 'CAUTH',
   serviceRequests: 'SREQ',
+  websiteRentals: 'WEBRENT',
+  websiteServices: 'WEBSVC',
 };
 
 const allowedCollections = new Set([
@@ -105,6 +107,8 @@ const allowedCollections = new Set([
   'staffTargets',
   'adminPayments',
   'serviceRequests',
+  'websiteRentals',
+  'websiteServices',
 ]);
 
 const caAdminReadableCollections = new Set([

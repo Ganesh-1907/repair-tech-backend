@@ -8,6 +8,8 @@ import { crudRouter } from './routes/crudRoutes.js';
 import { discountRouter } from './routes/discountRoutes.js';
 import { leadsRouter } from './routes/leadsRoutes.js';
 import { moduleRouter } from './routes/moduleRoutes.js';
+import { publicRouter } from './routes/publicRoutes.js';
+import { uploadRouter } from './routes/uploadRoutes.js';
 
 export const app = express();
 
@@ -39,6 +41,8 @@ app.use('/api/leads', leadsRouter);
 app.use('/api/amc', amcRouter);
 app.use('/api/cmc', cmcRouter);
 app.use('/api/discounts', discountRouter);
+app.use('/api/public', publicRouter);
+app.use('/api/upload', uploadRouter);
 app.use('/api', moduleRouter);
 app.use('/api/records', crudRouter);
 
