@@ -72,7 +72,6 @@ const validateLead = (payload) => {
   const serviceType = normalizeServiceType(payload.serviceType);
   const source = trimString(payload.source);
 
-  if (!company) errors.company = 'Company is required.';
   if (!customerName) errors.customerName = 'Customer name is required.';
   if (!mobileNumber) {
     errors.mobileNumber = 'Mobile number is required.';
