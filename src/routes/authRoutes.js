@@ -132,6 +132,27 @@ const customerPublic = (record) => ({
   forcePasswordChange: record.forcePasswordChange || false,
 });
 
+// ── GET /auth/customer/accounts  (admin/staff calls this to get setup portal accounts) ──
+authRouter.get('/customer/accounts', requireAuth, async (req, res, next) => {
+  try {
+    if (!['admin', 'staff'].includes(req.user?.role)) {
+      return res.status(403).json({ message: 'Admin access required.' });
+    }
+    const records = await listRecords('customerAuth');
+    const list = records.map((r) => ({
+      email: r.email,
+      contractIds: r.contractIds || [],
+      customerName: r.customerName,
+      status: r.status,
+      createdAt: r.createdAt,
+      lastLogin: r.lastLogin,
+    }));
+    return res.json(list);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 // ── POST /auth/customer/setup  (admin calls this to create/update credentials) ─
 authRouter.post('/customer/setup', requireAuth, async (req, res, next) => {
   try {
@@ -286,30 +307,58 @@ authRouter.post('/customer/forgot-password', async (req, res, next) => {
     const records = await listRecords('customerAuth');
     const record = records.find((r) => r.email === normalEmail && r.status === 'active');
 
-    if (record) {
-      const token = crypto.randomBytes(32).toString('hex');
-      const updated = {
-        ...record,
-        passwordResetToken: token,
-        passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      await saveRecord('customerAuth', updated, 'CAUTH');
-
-      const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/customer/reset-password?token=${token}`;
-      try {
-        await sendPasswordResetEmail({
-          to: normalEmail,
-          name: record.customerName,
-          resetUrl,
-          isCustomer: true,
-        });
-      } catch (mailErr) {
-        console.error('[Email] Failed to send customer reset email:', mailErr.message);
-      }
+    if (!record) {
+      return res.status(404).json({ message: 'No customer account found with this email.' });
     }
 
-    return res.json({ success: true, message: 'If that email exists, a reset link has been sent.' });
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const updated = {
+      ...record,
+      resetOtp: otp,
+      resetOtpExpires: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 mins
+      updatedAt: new Date().toISOString(),
+    };
+    await saveRecord('customerAuth', updated, 'CAUTH');
+
+    return res.json({
+      success: true,
+      message: 'OTP has been generated.',
+      otp: otp,
+      email: normalEmail
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ── Customer: Reset password via OTP ────────────────────────────────────────
+authRouter.post('/customer/reset-password-otp', async (req, res, next) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword || newPassword.length < 6) {
+      return res.status(400).json({ message: 'Email, OTP, and new password (min 6 chars) are required.' });
+    }
+
+    const normalEmail = String(email).trim().toLowerCase();
+    const records = await listRecords('customerAuth');
+    const record = records.find(
+      (r) => r.email === normalEmail && r.resetOtp === String(otp) && r.resetOtpExpires && new Date(r.resetOtpExpires) > new Date()
+    );
+    if (!record) {
+      return res.status(400).json({ message: 'Invalid OTP or OTP has expired.' });
+    }
+
+    const updated = {
+      ...record,
+      passwordHash: await bcrypt.hash(newPassword, 10),
+      resetOtp: undefined,
+      resetOtpExpires: undefined,
+      forcePasswordChange: false,
+      updatedAt: new Date().toISOString(),
+    };
+    await saveRecord('customerAuth', updated, 'CAUTH');
+
+    return res.json({ success: true, message: 'Password updated. You can now log in.' });
   } catch (error) {
     return next(error);
   }
@@ -340,6 +389,113 @@ authRouter.post('/customer/reset-password', async (req, res, next) => {
     await saveRecord('customerAuth', updated, 'CAUTH');
 
     return res.json({ success: true, message: 'Password updated. You can now log in.' });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ── Customer: Update profile details ───────────────────────────────────────────
+authRouter.put('/customer/profile', requireAuth, async (req, res, next) => {
+  try {
+    if (req.user?.role !== 'customer') {
+      return res.status(403).json({ message: 'Customer access required.' });
+    }
+
+    const { customerName, address, gstin, primaryMobile, authorizedPerson1 } = req.body;
+    const contractIds = req.user.contractIds || [];
+
+    if (!contractIds.length) {
+      return res.status(400).json({ message: 'No contracts linked to this account.' });
+    }
+
+    // 1. Update customerAuth itself
+    const authRecords = await listRecords('customerAuth');
+    const authRecord = authRecords.find((r) => r.email === req.user.email);
+    if (authRecord) {
+      await saveRecord('customerAuth', {
+        ...authRecord,
+        customerName: customerName || authRecord.customerName,
+        updatedAt: new Date().toISOString()
+      }, 'CAUTH');
+    }
+
+    // Helper to find and update nested keys
+    const updateMatchingContracts = async (collection, detailsKey, prefix) => {
+      const all = await listRecords(collection);
+      const matched = all.filter((r) => contractIds.includes(r.id || r.contractId));
+      for (const item of matched) {
+        const details = item[detailsKey] || {};
+        const updatedDetails = {
+          ...details,
+          address: address !== undefined ? address : details.address,
+          gstin: gstin !== undefined ? gstin : details.gstin,
+          authorizedPerson1: authorizedPerson1 !== undefined ? authorizedPerson1 : details.authorizedPerson1,
+        };
+        if (details.primaryContact) {
+          updatedDetails.primaryContact = {
+            ...details.primaryContact,
+            mobile: primaryMobile !== undefined ? primaryMobile : details.primaryContact.mobile,
+          };
+        } else if (primaryMobile !== undefined) {
+          updatedDetails.primaryContact = { mobile: primaryMobile };
+        }
+
+        const updatedRecord = {
+          ...item,
+          customerName: customerName !== undefined ? customerName : item.customerName,
+          name: customerName !== undefined ? customerName : item.name,
+          address: address !== undefined ? address : item.address,
+          gstin: gstin !== undefined ? gstin : item.gstin,
+          [detailsKey]: updatedDetails,
+          updatedAt: new Date().toISOString()
+        };
+
+        await saveRecord(collection, updatedRecord, prefix);
+      }
+    };
+
+    // Update AMC contracts
+    await updateMatchingContracts('amcContracts', 'amcDetails', 'AMC');
+
+    // Update CMC contracts
+    await updateMatchingContracts('cmcContracts', 'cmcDetails', 'CMC');
+
+    // Update Rental Customers
+    const rentals = await listRecords('rentalCustomers');
+    const matchedRentals = rentals.filter((r) => contractIds.includes(r.id || r.contractId));
+    for (const item of matchedRentals) {
+      const updated = {
+        ...item,
+        customerName: customerName !== undefined ? customerName : item.customerName,
+        name: customerName !== undefined ? customerName : item.name,
+        address: address !== undefined ? address : item.address,
+        gstin: gstin !== undefined ? gstin : item.gstin,
+        phone: primaryMobile !== undefined ? primaryMobile : item.phone,
+        mobile: primaryMobile !== undefined ? primaryMobile : item.mobile,
+        contactPerson: authorizedPerson1 !== undefined ? authorizedPerson1 : item.contactPerson,
+        updatedAt: new Date().toISOString()
+      };
+      await saveRecord('rentalCustomers', updated, 'RC');
+    }
+
+    // Update Leads
+    const leads = await listRecords('leads');
+    const matchedLeads = leads.filter((r) => contractIds.includes(r.id || r.contractId));
+    for (const item of matchedLeads) {
+      const updated = {
+        ...item,
+        customerName: customerName !== undefined ? customerName : item.customerName,
+        name: customerName !== undefined ? customerName : item.name,
+        address: address !== undefined ? address : item.address,
+        gst: gstin !== undefined ? gstin : item.gst,
+        gstin: gstin !== undefined ? gstin : item.gstin,
+        phone: primaryMobile !== undefined ? primaryMobile : item.phone,
+        updatedAt: new Date().toISOString()
+      };
+      await saveRecord('leads', updated, 'LD');
+    }
+
+    return res.json({ success: true, message: 'Profile updated successfully.' });
   } catch (error) {
     return next(error);
   }
